@@ -1,0 +1,172 @@
+# heal-yield benchmark manifest — v1.0.0
+# Declared 2026-09-14, BEFORE any run. Ticket 07.
+#
+# This file is the anti-cherry-picking mechanism. The full set is declared up
+# front; v1 runs three of them and marks the rest "declared, not yet run".
+# Changing this file is a versioned event — see `policy` at the bottom.
+
+manifest_version: 1.0.0
+declared: 2026-09-14
+
+selection_criteria:
+  - Pure-Python wheel (no compiled extension) — installs anywhere, no toolchain.
+  - Test suite runs offline: no network, no services, no database, no credentials.
+  - pytest-runnable (pytest collects unittest-style suites too).
+  - Permissive license (MIT / BSD / Apache-2.0) — transcripts in the runs repo
+    quote source, so copyleft is excluded.
+  - Non-trivial logic; domains deliberately spread so no result is a genre artifact.
+  - Pinned to the latest tagged release at manifest time, not to an arbitrary
+    `main` HEAD — a tag is a point a reader can `pip download` and diff against.
+
+module_selection_rule: |
+  Applied identically to every repo; never hand-picked. Take the 5 source modules
+  with the highest statement count, where a module is a .py file under the
+  package root, excluding: __init__.py, __main__.py, anything matching
+  _compat*/compat*/_version*/version*, anything under a tests/ or test/ path,
+  and any module with fewer than 20 statements. Ties broken by path, ascending.
+  Statement counts come from `coverage.py` on the pinned SHA. A reader can
+  derive the exact module list from the SHA alone.
+
+baseline_rule: |
+  Before a run, the target module's existing tests are removed, and baseline
+  coverage is measured without them. Every target therefore starts from the same
+  place and heal yield is not confounded by how well-tested the package already
+  was. This is NOT a claim to improve on the maintainers' suites.
+
+repos:
+  # ---- headline set (10) --------------------------------------------------
+  - name: cachetools
+    repo: https://github.com/tkem/cachetools
+    tag: v7.1.8
+    sha: 4500e3d04288738d25acbb4973eb3c3e1bf41db9
+    tag_date: 2026-08-31
+    license: MIT
+    domain: cache eviction policies
+    tier: headline
+    v1_run: true
+  - name: packaging
+    repo: https://github.com/pypa/packaging
+    tag: "26.3"
+    sha: 929fd4b1410ac7ef61ef3f45b2f5d7e87711a9b5
+    tag_date: 2026-08-03
+    license: Apache-2.0 OR BSD-2-Clause
+    domain: version / specifier / marker logic
+    tier: headline
+    v1_run: true
+  - name: textdistance
+    repo: https://github.com/orsinium/textdistance
+    tag: "4.6.3"
+    sha: faa25f6ff50d0f34dc9655d4d7b0d8daf6f9ff85
+    tag_date: 2024-07-16
+    license: MIT
+    domain: string-distance algorithms
+    tier: headline
+    v1_run: true
+  - name: tabulate
+    repo: https://github.com/astanin/python-tabulate
+    tag: v0.10.0
+    sha: 3b4cd509820e4c45cd2aaba833aa585ea6308b94
+    tag_date: 2026-03-04
+    license: MIT
+    domain: text table rendering
+    tier: headline
+    v1_run: false
+  - name: humanize
+    repo: https://github.com/python-humanize/humanize
+    tag: "4.16.0"
+    sha: 3c577d7650508d52aa2982e930b0e744c343082f
+    tag_date: 2026-06-30
+    license: MIT
+    domain: number / date formatting, i18n
+    tier: headline
+    v1_run: false
+  - name: funcy
+    repo: https://github.com/Suor/funcy
+    tag: "2.0"
+    sha: 13fac0037c109a9e4649fc8ee343be17647f7407
+    tag_date: 2023-03-28
+    license: BSD-3-Clause
+    domain: functional utilities
+    tier: headline
+    v1_run: false
+    note: PyPI ships 2.1; upstream never tagged it. Pinned to the last tagged release.
+  - name: pydash
+    repo: https://github.com/dgilland/pydash
+    tag: v8.1.0
+    sha: f46de3669742c075e5379c1e193c86c1c2c70dc2
+    tag_date: 2026-08-29
+    license: MIT
+    domain: collection / object utilities
+    tier: headline
+    v1_run: false
+  - name: tomlkit
+    repo: https://github.com/python-poetry/tomlkit
+    tag: "0.15.1"
+    sha: 1bd7e3bc5bcc957d359a6c4d8e420163f32ac009
+    tag_date: 2026-07-17
+    license: MIT
+    domain: style-preserving TOML parser
+    tier: headline
+    v1_run: false
+  - name: boltons
+    repo: https://github.com/mahmoud/boltons
+    tag: "26.2.0"
+    sha: 4332b35a278d694f30c99881faa61cde695c7a96
+    tag_date: 2026-09-07
+    license: BSD-3-Clause
+    domain: stdlib-adjacent utilities
+    tier: headline
+    v1_run: false
+  - name: mistune
+    repo: https://github.com/lepture/mistune
+    tag: v3.3.4
+    sha: 69ec2b8a6d5b37ecb3c56d96df4b40b9d3004657
+    tag_date: 2026-07-22
+    license: BSD-3-Clause
+    domain: markdown parser
+    tier: headline
+    v1_run: false
+
+  # ---- comparability anchors (2) -----------------------------------------
+  # CodaMosa/CoverUp lineage. NEVER blended into the headline average; reported
+  # separately, solely so an external published number exists to stand next to.
+  - name: python-string-utils
+    repo: https://github.com/daveoncode/python-string-utils
+    tag: v1.0.0
+    sha: d903db3c24de35c5cb7e1229ebbcc19775a952a8
+    tag_date: 2020-03-04
+    license: MIT
+    domain: string helpers
+    tier: anchor
+    v1_run: false
+  - name: dataclasses-json
+    repo: https://github.com/lidatong/dataclasses-json
+    tag: v0.6.7
+    sha: dc63902eeb5e1c5ce1ea4e078c50e0eb9bc1a541
+    tag_date: 2024-06-09
+    license: MIT
+    domain: serialization
+    tier: anchor
+    v1_run: false
+
+# Promoted from the bench only if a declared repo fails a dry run; the failure
+# and the substitution are both recorded in the changelog.
+reserve_bench:
+  - markdown      # https://github.com/Python-Markdown/markdown
+  - semver        # https://github.com/python-semver/python-semver
+  - more-itertools
+  - schema
+
+policy:
+  headline_average_over: headline   # anchors excluded, always
+  repetitions: 5                    # never fewer, for any headline claim
+  truncated_runs_may_be_a_headline_rep: false
+  change_control: |
+    Adding or repinning a repo is a minor version bump of this manifest with a
+    changelog entry naming the reason. Removing a repo requires a stated reason,
+    and that repo's last published numbers stay published.
+
+excluded_and_why:
+  - {name: chardet,  reason: platform-specific wheels — not pure Python}
+  - {name: wrapt,    reason: platform-specific wheels — not pure Python}
+  - {name: pytutils, reason: GPL — incompatible with quoting source in the runs repo}
