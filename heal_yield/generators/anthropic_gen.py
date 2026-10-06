@@ -9,7 +9,9 @@ Run it through the harness, never directly:
 set; this generator refuses to run without an explicit key, because it spends
 money.
 
-One model, temperature 0.0, dated model ID recorded in `metadata.yaml`. The
+One model, temperature 0.0. The model id written to the usage record -- and
+from there to `metadata.yaml` -- is the one the API reports having served, so
+it carries the date suffix even when an alias was requested. The
 full request and response are written to the run's artifact directory, because
 a transcript nobody can read is not evidence.
 
@@ -53,14 +55,25 @@ SYSTEM = (
 )
 
 
-def price(model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    for prefix, (pin, pout) in PRICING.items():
+def pricing_for(model: str) -> Tuple[float, float]:
+    """The (input, output) USD-per-million-token row for a model id.
+
+    Matched by prefix so a dated id (`claude-sonnet-4-5-20250929`) finds the
+    row of its alias. `price` and the usage record both go through here, so
+    the rate that was charged and the rate that is written down cannot differ.
+    """
+    for prefix, row in PRICING.items():
         if model.startswith(prefix):
-            return (prompt_tokens * pin + completion_tokens * pout) / 1_000_000.0
+            return row
     raise SystemExit(
         "no price on record for model %r. Refusing to publish a cost of zero: "
         "add it to heal_yield/generators/anthropic_gen.py PRICING first." % model
     )
+
+
+def price(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    pin, pout = pricing_for(model)
+    return (prompt_tokens * pin + completion_tokens * pout) / 1_000_000.0
 
 
 def build_prompt(module: str, source: str, feedback: str, round_index: int) -> str:
@@ -133,6 +146,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 2
 
+    # Before the request, not after it: an unpriced model must refuse to start,
+    # not be billed and then fail to record what it cost.
+    pricing_for(model)
+
     source = read_source(args.repo, args.source_file)
     feedback = read_feedback(args.feedback_file)
     prompt = build_prompt(args.module, source, feedback, args.round)
@@ -169,10 +186,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         with open(os.path.join(args.out_dir, name), "w") as fh:
             fh.write(code)
 
+    # The id the API says it served, which carries the date suffix even when an
+    # alias was requested. That is the one METRICS.md requires in metadata.yaml.
+    served_model = response.get("model") or model
     write_meta(
-        args.meta_out, model, prompt_tokens, completion_tokens, usd,
-        {"round": args.round, "emitted": bool(code),
-         "pricing_usd_per_mtok": list(PRICING.get(model, PRICING.get(DEFAULT_MODEL)))},
+        args.meta_out, served_model, prompt_tokens, completion_tokens, usd,
+        {"round": args.round, "emitted": bool(code), "requested_model": model,
+         "stop_reason": response.get("stop_reason"),
+         "pricing_usd_per_mtok": list(pricing_for(model))},
     )
     return 0
 

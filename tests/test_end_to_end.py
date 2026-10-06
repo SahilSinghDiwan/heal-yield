@@ -438,3 +438,83 @@ def test_a_generator_that_fails_is_not_recorded_as_a_model_that_emitted_nothing(
     assert result["ok"], [c for c in result["checks"] if not c["ok"]]
     check = [c for c in result["checks"] if c["name"] == "headline-eligibility"][0]
     assert "NOT eligible" in check["detail"]
+
+
+# ------------------------------------------------------------- model identity
+def test_the_published_model_id_is_the_one_the_generator_reported(
+    run_on_a_repo_with_its_own_suite,
+):
+    """The harness does not choose the model, so it must not name it either.
+
+    `heal-yield run --model` used to default to the fixture's id. The README's
+    paid command sets the model inside `--generator`, so a paid run would have
+    been published as `stub-fixture-generator/1`.
+    """
+    from heal_yield.cli import build_parser
+
+    _store, run = run_on_a_repo_with_its_own_suite  # built with no model label
+    assert run["config"]["models_reported_by_generator"] == ["stub-fixture-generator/1"]
+    assert run["config"]["model"] == "stub-fixture-generator/1"
+
+    args = build_parser().parse_args([
+        "run", "--repo", "cachetools", "--ceiling-usd", "1", "--per-candidate-timeout", "60",
+        "--generator", "python -m heal_yield.generators.anthropic_gen --model some-model",
+    ])
+    assert args.model is None
+
+
+def _paid_generator_argv(tmp_path, model):
+    (tmp_path / "pkg").mkdir(exist_ok=True)
+    (tmp_path / "pkg" / "mod.py").write_text("def f():\n    return 1\n")
+    return [
+        "--model", model,
+        "--module", "pkg.mod",
+        "--source-file", "pkg/mod.py",
+        "--repo", str(tmp_path),
+        "--out-dir", str(tmp_path / "out"),
+        "--round", "0",
+        "--meta-out", str(tmp_path / "usage.json"),
+    ]
+
+
+def test_the_paid_generator_records_the_served_model_id_and_the_rate_it_charged(
+    tmp_path, monkeypatch
+):
+    """No request is made: `call_model` is replaced. This pins what gets written down."""
+    from heal_yield.generators import anthropic_gen
+
+    def fake_call(model, prompt, api_key, max_tokens=8000):
+        return {
+            "model": "claude-haiku-4-5-20251001",
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 1000, "output_tokens": 2000},
+            "content": [{"type": "text", "text": "```python\ndef test_f():\n    assert 1\n```"}],
+        }
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "not-a-real-key")
+    monkeypatch.delenv("HEAL_YIELD_ARTIFACT_DIR", raising=False)
+    monkeypatch.setattr(anthropic_gen, "call_model", fake_call)
+    assert anthropic_gen.main(_paid_generator_argv(tmp_path, "claude-haiku-4-5")) == 0
+
+    with open(str(tmp_path / "usage.json")) as fh:
+        meta = json.load(fh)
+    assert meta["model"] == "claude-haiku-4-5-20251001", "the dated id the API served"
+    assert meta["requested_model"] == "claude-haiku-4-5"
+    assert meta["pricing_usd_per_mtok"] == [1.0, 5.0], "the row that was actually charged"
+    assert meta["usd"] == pytest.approx((1000 * 1.0 + 2000 * 5.0) / 1e6)
+    assert (tmp_path / "out" / "test_pkg_mod.py").exists()
+
+
+def test_the_paid_generator_refuses_an_unpriced_model_before_any_request(
+    tmp_path, monkeypatch
+):
+    from heal_yield.generators import anthropic_gen
+
+    def must_not_be_called(*_args, **_kwargs):
+        pytest.fail("a request was made for a model with no price on record")
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(anthropic_gen, "call_model", must_not_be_called)
+    with pytest.raises(SystemExit) as refused:
+        anthropic_gen.main(_paid_generator_argv(tmp_path, "a-model-nobody-priced"))
+    assert "no price on record" in str(refused.value)

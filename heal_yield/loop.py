@@ -86,7 +86,7 @@ class LoopConfig(object):
         ceiling_usd: Optional[float] = None,
         per_candidate_timeout_s: Optional[float] = None,
         generator_timeout_s: float = 300.0,
-        model: str = "unknown",
+        model: Optional[str] = None,
         temperature: float = 0.0,
         repetition: Optional[int] = None,
         per_candidate_coverage: bool = True,
@@ -403,7 +403,7 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
         "fixture": fixture_seen,
         "repo": {"package": config.package, "sha": sha, "dir": os.path.basename(config.repo_dir)},
         "manifest_version": manifest_version,
-        "config": config.to_dict(),
+        "config": _config_with_model(config, ledger),
         "candidates": [s.to_dict() for s in states],
         "cost": ledger.to_dict(),
         "coverage": {
@@ -419,6 +419,22 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
 
 
 # ---------------------------------------------------------------- helpers
+
+
+def _config_with_model(config: LoopConfig, ledger: CostLedger) -> Dict:
+    """The run's configuration, with the model id the generator actually reported.
+
+    The harness does not choose the model -- the generator does, and says which
+    in every usage record. So the published model id is read from those
+    records. An operator-supplied label is kept if one was given, but it never
+    replaces what the generator reported: both are written down.
+    """
+    cfg = config.to_dict()
+    reported = sorted({r.model for r in ledger.records if r.model})
+    cfg["models_reported_by_generator"] = reported
+    if cfg["model"] is None:
+        cfg["model"] = ", ".join(reported) if reported else "unknown"
+    return cfg
 
 
 def _strip(summary: Dict) -> Dict:

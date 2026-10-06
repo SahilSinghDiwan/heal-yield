@@ -181,7 +181,9 @@ def _metadata(run: Dict, repo, sha: str, m) -> Dict:
         "repo": {"name": repo.name, "url": repo.repo, "tag": repo.tag, "sha": sha,
                  "license": repo.license, "tier": repo.tier},
         "manifest": {"version": m.version, "declared": m.data.get("declared")},
-        "model": {"id": cfg["model"], "temperature": cfg["temperature"]},
+        "model": {"id": cfg["model"],
+                  "reported_by_generator": cfg["models_reported_by_generator"],
+                  "temperature": cfg["temperature"]},
         "loop": {"k": cfg["k"], "flake_gate_executions": cfg["flake_gate_executions"],
                  "generator_command": cfg["generator_command"]},
         "limits": {"per_candidate_timeout_s": cfg["per_candidate_timeout_s"],
@@ -239,7 +241,11 @@ def build_parser() -> argparse.ArgumentParser:
     r = sub.add_parser("run", help="one measured run")
     r.add_argument("--repo", required=True, help="a name from the declared manifest")
     r.add_argument("--generator", default=STUB_GENERATOR)
-    r.add_argument("--model", default="stub-fixture-generator/1")
+    r.add_argument("--model", default=None,
+                   help="a label for the model, recorded beside what the generator "
+                        "reports. Omit it: the published model id is read from the "
+                        "generator's own usage records. It does not select a model -- "
+                        "that is the generator's flag, inside --generator.")
     r.add_argument("--temperature", type=float, default=0.0)
     r.add_argument("--k", type=int, default=3)
     # No defaults, deliberately. METRICS.md declares both of these unset: they
