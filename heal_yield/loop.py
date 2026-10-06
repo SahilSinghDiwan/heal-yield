@@ -43,6 +43,37 @@ class UnsetLimit(ValueError):
     """
 
 
+class GeneratorFailed(Exception):
+    """The generator command did not exit 0, or outlived its timeout.
+
+    The contract (`generator.py`) is "exit 0 on success". Anything else is a
+    failure of the generator or of its environment -- a missing API key, a
+    rate limit, a retired model id -- and says nothing about what a model can
+    do. It ends the run with `status: generator-failed` rather than being
+    counted as `no-output`, which means "the model emitted nothing usable"
+    and would be a false statement about a model that was never reached.
+    """
+
+
+def _invoke(generator: Generator, ledger: CostLedger, **kwargs):
+    """Call the generator and record its usage; raise if it failed.
+
+    The usage is recorded *before* the failure is raised, for the same reason
+    the ceiling is checked after recording: a call that was billed and then
+    failed must still appear in the published cost.
+    """
+    result = generator.invoke(**kwargs)
+    ledger.record(result.usage)
+    if result.returncode != 0:
+        tail = [ln.strip() for ln in result.stderr.splitlines() if ln.strip()]
+        raise GeneratorFailed(
+            "generator failed for %s at round %d (exit %s): %s"
+            % (kwargs["module"], kwargs["round_index"], result.returncode,
+               (tail[-1] if tail else "no stderr")[:300])
+        )
+    return result
+
+
 class LoopConfig(object):
     def __init__(
         self,
@@ -186,7 +217,9 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
         # ---------------- round 0: generate ----------------
         for module in config.modules:
             out_dir = store.generated_dir(module, 0)
-            result = generator.invoke(
+            result = _invoke(
+                generator,
+                ledger,
                 module=module,
                 source_file=config.module_files[module],
                 repo=config.repo_dir,
@@ -194,7 +227,6 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
                 round_index=0,
                 artifact_dir=store.model_dir(module, 0),
             )
-            ledger.record(result.usage)
             fixture_seen = fixture_seen or bool(result.meta.get("fixture"))
             emitted = _install(out_dir, gen_root, module)
             module_candidates = []
@@ -301,8 +333,10 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
                     if s.disposition is None and s.healed_at_round is None:
                         s.disposition = "still-failing"
 
-    except CeilingTripped as exc:
-        status = "truncated"
+    except (CeilingTripped, GeneratorFailed) as exc:
+        # Both end the run early and both are published in full. Neither can
+        # be a headline repetition: eligibility requires `status: complete`.
+        status = "truncated" if isinstance(exc, CeilingTripped) else "generator-failed"
         truncation_reason = str(exc)
         for s in states:
             if s.disposition is None and s.healed_at_round is None:
@@ -446,7 +480,9 @@ def _repair(config, store, generator, ledger, active, round_index) -> None:
                     before_sources[s.c.file] = fh.read()
 
         out_dir = store.generated_dir(module, round_index)
-        result = generator.invoke(
+        _invoke(
+            generator,
+            ledger,
             module=module,
             source_file=config.module_files[module],
             repo=config.repo_dir,
@@ -455,7 +491,6 @@ def _repair(config, store, generator, ledger, active, round_index) -> None:
             artifact_dir=store.model_dir(module, round_index),
             feedback_file=feedback_path,
         )
-        ledger.record(result.usage)
 
         gen_root = os.path.join(config.repo_dir, GENERATED_DIR)
         emitted = _install(out_dir, gen_root, module)
@@ -519,6 +554,7 @@ def load_run(store: RunStore) -> Dict:
 
 __all__ = [
     "LoopConfig",
+    "GeneratorFailed",
     "run_loop",
     "write_run",
     "load_run",

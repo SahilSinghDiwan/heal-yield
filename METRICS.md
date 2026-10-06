@@ -124,6 +124,19 @@ over that N, and the truncation is stamped on every table.
 claim.** All five reps must be `status: complete`. The exclusion is mechanical
 and stated, not discretionary.
 
+## Generator failures
+
+A generator that does not exit 0, or that outlives its timeout, ends the run
+with `status: generator-failed`. That is a failure of the generator or of its
+environment — a missing API key, a rate limit, a retired model id — and it is
+**not** disposition `no-output`, which means the model was reached and emitted
+nothing usable.
+
+The run is written in full, with every call made before the failure still in
+the cost ledger, and N is whatever was generated. Like a truncated run it
+**can never be one of the 5 repetitions behind a headline claim**, for the same
+mechanical reason: its status is not `complete`.
+
 ## Declared-as-unset values
 
 Two limits in this document are **declared-as-unset**. They are named here,

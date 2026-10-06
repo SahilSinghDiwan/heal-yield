@@ -160,6 +160,13 @@ def cmd_run(args) -> int:
     print()
     print(report_mod.render(run, run["metrics"]))
     print("run written to %s" % run_root)
+    if run["status"] == "generator-failed":
+        sys.stderr.write(
+            "error: the run did not complete -- %s\nIt is recorded in full with "
+            "`status: generator-failed` and is not eligible as a headline repetition. "
+            "Nothing in it describes what a model can do.\n" % run["truncation_reason"]
+        )
+        return 1
     return 0
 
 

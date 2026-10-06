@@ -32,7 +32,7 @@ def render(run: Dict, metrics: Dict, runs_sha: Optional[str] = None) -> str:
     if run["status"] != "complete":
         a("> **status: %s** -- %s" % (run["status"], run.get("truncation_reason") or ""))
         a("> Every percentage below is computed over the N that was reached.")
-        a("> A truncated run can never be one of the 5 headline repetitions.")
+        a("> A run that is not `complete` can never be one of the 5 headline repetitions.")
         a("")
     a("Generated %s - model `%s` at temperature %s, k = %s."
       % (run["created_utc"], cfg["model"], cfg["temperature"], cfg["k"]))

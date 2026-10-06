@@ -387,3 +387,54 @@ def test_verify_catches_a_passed_backed_by_a_flake_gate_record_nobody_ran(finish
     assert not evidence["ok"], "verify accepted a flake-gate record with no execution behind it"
     assert "flake gate" in evidence["problems"][0]
     assert not result["ok"]
+
+
+# ------------------------------------------------------- generator failure
+FAILING_GENERATOR = '''
+import sys
+
+sys.stderr.write("ANTHROPIC_API_KEY is not set.\\n")
+raise SystemExit(2)
+'''
+
+
+def test_a_generator_that_fails_is_not_recorded_as_a_model_that_emitted_nothing(
+    tmp_path, target_repo
+):
+    """A missing key or a 429 is an environment failure, not a result.
+
+    Rehearsing the paid command with no API key produced a run that was
+    `status: complete`, counted every module as `no-output` ("the model
+    emitted nothing usable"), called itself headline-eligible, and verified.
+    No model had been contacted.
+    """
+    script = tmp_path / "failing_gen.py"
+    script.write_text(FAILING_GENERATOR)
+    store = RunStore(str(tmp_path / "run"))
+    config = LoopConfig(
+        repo_dir=str(target_repo),
+        package="tinypkg",
+        modules=["tinypkg.core"],
+        module_files={"tinypkg.core": os.path.join("tinypkg", "core.py")},
+        generator_command="%s %s" % (sys.executable, script),
+        ceiling_usd=1.0,
+        per_candidate_timeout_s=60.0,
+        generator_timeout_s=120.0,
+    )
+    run = run_loop(config, store, sha="0" * 40, manifest_version="test")
+    write_run(store, run)
+
+    assert run["status"] == "generator-failed"
+    assert "exit 2" in run["truncation_reason"]
+    assert "ANTHROPIC_API_KEY is not set." in run["truncation_reason"]
+    assert run["metrics"]["metric_9_dispositions"]["ledger"]["no-output"] == 0
+    assert run["metrics"]["headline_eligible"] is False
+
+    text = report.render(run, run["metrics"])
+    assert "status: generator-failed" in text
+    assert "Headline-eligible: NO" in text
+
+    result = verify.verify_run(store.root)
+    assert result["ok"], [c for c in result["checks"] if not c["ok"]]
+    check = [c for c in result["checks"] if c["name"] == "headline-eligibility"][0]
+    assert "NOT eligible" in check["detail"]
