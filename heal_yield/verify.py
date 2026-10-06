@@ -5,16 +5,22 @@ read files under a run directory and nothing else. It never imports the target
 package, never starts pytest and never contacts a model. If it ever needed to,
 the tool's central claim would be false.
 
-Four independent checks, reported separately because they fail for different
+Seven independent checks, reported separately because they fail for different
 reasons:
 
   1. **integrity** -- do the artifacts still hash to what `SHA256SUMS` says?
   2. **ledger** -- does every candidate carry exactly one enum disposition,
      and do the dispositions sum to N?
-  3. **evidence** -- does every candidate's recorded outcome have a raw file
-     behind it, and does re-reading that file give the same outcome?
-  4. **arithmetic** -- does recomputing the metrics from `run.json` reproduce
+  3. **evidence** -- does every recorded execution, including each of the
+     flake gate's, have a raw file behind it, and does re-reading that file
+     give the same outcome?
+  4. **disposition-evidence** -- is each disposition entailed by that
+     candidate's own recorded rounds?
+  5. **arithmetic** -- does recomputing the metrics from `run.json` reproduce
      the metrics block that was published?
+  6. **coverage** -- does the stored coverage XML give the stored totals?
+  7. **headline-eligibility** -- does the run's own flag agree with its
+     status and fixture bit?
 """
 
 from __future__ import annotations
@@ -108,9 +114,26 @@ def _check_evidence(store: RunStore, run: Dict) -> Check:
     """
     problems: List[str] = []
     checked = 0
+    gate_n = run["config"].get("flake_gate_executions", 5)
+    gate_executions = None  # read once, and only if some candidate reached the gate
     for c in run["candidates"]:
         if c["disposition"] == "no-output":
             continue
+        for r in c.get("rounds", []):
+            if r.get("phase") != "flake-gate":
+                continue
+            # `passed` rests on this record more than on any other, so it is
+            # re-derived from the gate's own raw output like every other
+            # execution -- not taken from run.json on its word.
+            if gate_executions is None:
+                gate_executions = _read_gate(store, gate_n, problems)
+                checked += len(gate_executions)
+            derived_gate = [_outcome_from(outcomes, c) for outcomes in gate_executions]
+            if derived_gate != r.get("outcomes"):
+                problems.append(
+                    "%s flake gate: recorded %r, artifacts say %r"
+                    % (c["id"], r.get("outcomes"), derived_gate)
+                )
         rounds = [r for r in c.get("rounds", []) if r.get("phase") == "run"]
         if not rounds and c["disposition"] not in ("collect-error", "build-failure",
                                                    "weakened-rejected"):
@@ -141,6 +164,19 @@ def _check_evidence(store: RunStore, run: Dict) -> Check:
                     % (c["id"], r.get("round"), recorded, derived_outcome)
                 )
     return Check("evidence", not problems, "%d executions re-read from disk" % checked, problems)
+
+
+def _read_gate(store: RunStore, gate_n: int, problems: List[str]) -> List[Dict[str, str]]:
+    """Re-read the terminal flake gate's executions from disk, in order."""
+    executions: List[Dict[str, str]] = []
+    for i in range(1, gate_n + 1):
+        prefix = store.gate_prefix(i)
+        if not os.path.exists(prefix + ".txt"):
+            problems.append("flake gate execution %d of %d has no artifact" % (i, gate_n))
+            continue
+        _returncode, _timed_out, outcomes = read_execution(prefix)
+        executions.append(outcomes)
+    return executions
 
 
 def _check_disposition_evidence(run: Dict) -> Check:

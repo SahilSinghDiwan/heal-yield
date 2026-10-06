@@ -353,3 +353,37 @@ def test_baseline_and_final_coverage_share_one_denominator(run_on_a_repo_with_it
     with open(store.coverage_path("baseline", "xml")) as fh:
         assert "other.py" in fh.read()
     assert verify.verify_run(store.root)["ok"]
+
+
+def test_verify_catches_a_passed_backed_by_a_flake_gate_record_nobody_ran(finished_run):
+    """`passed` must be re-derived from the gate's raw output, not from run.json.
+
+    Relabel a candidate that never healed as `passed`, hand it a five-pass
+    gate record and recompute the metrics block so the arithmetic agrees. On
+    the first cachetools rehearsal this moved heal yield from 5.3% to 26.3%
+    and `verify` still printed VERIFIED.
+    """
+    from heal_yield import metrics
+
+    store, run = finished_run
+    for c in run["candidates"]:
+        if c["disposition"] in ("still-failing", "no-progress-abort"):
+            c["disposition"] = "passed"
+            c["healed_at_round"] = 1
+            c["rounds"].append({
+                "phase": "flake-gate",
+                "outcomes": ["passed"] * 5,
+                "artifact": "raw/pytest/gate/exec-1.txt",
+            })
+            break
+    else:
+        pytest.fail("the fixture should leave at least one unhealed candidate")
+    run["metrics"] = metrics.compute(run)
+    with open(store.path("run.json"), "w") as fh:
+        json.dump(run, fh, indent=2, sort_keys=True)
+
+    result = verify.verify_run(store.root)
+    evidence = [c for c in result["checks"] if c["name"] == "evidence"][0]
+    assert not evidence["ok"], "verify accepted a flake-gate record with no execution behind it"
+    assert "flake gate" in evidence["problems"][0]
+    assert not result["ok"]
