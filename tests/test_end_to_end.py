@@ -264,3 +264,92 @@ def test_a_fixture_run_is_barred_from_being_a_headline_repetition(finished_run):
     check = [c for c in result["checks"] if c["name"] == "headline-eligibility"][0]
     assert check["ok"] is True
     assert "NOT eligible" in check["detail"]
+
+
+# ---------------------------------------------------------------- coverage
+OTHER = '''
+"""A second target module that no pre-existing test imports."""
+
+
+def double(n):
+    if n is None:
+        return None
+    return n * 2
+'''
+
+EXISTING_SUITE = '''
+from tinypkg.core import Accumulator, bounded
+
+
+def test_bounded_clamps_low():
+    assert bounded(-5, 0, 10) == 0
+
+
+def test_accumulator_adds():
+    assert Accumulator().add(3) == 3
+'''
+
+
+@pytest.fixture()
+def run_on_a_repo_with_its_own_suite(tmp_path, target_repo):
+    """A target that, like every real one, still has tests after the baseline rule."""
+    (target_repo / "tinypkg" / "other.py").write_text(OTHER)
+    tests = target_repo / "tests"
+    tests.mkdir()
+    (tests / "test_existing.py").write_text(EXISTING_SUITE)
+    store = RunStore(str(tmp_path / "run"))
+    config = LoopConfig(
+        repo_dir=str(target_repo),
+        package="tinypkg",
+        modules=["tinypkg.core", "tinypkg.other"],
+        module_files={
+            "tinypkg.core": os.path.join("tinypkg", "core.py"),
+            "tinypkg.other": os.path.join("tinypkg", "other.py"),
+        },
+        generator_command=STUB,
+        k=1,
+        ceiling_usd=1.0,
+        per_candidate_timeout_s=60.0,
+        generator_timeout_s=120.0,
+    )
+    run = run_loop(config, store, sha="0" * 40, manifest_version="test")
+    write_run(store, run)
+    return store, run
+
+
+def test_final_coverage_is_the_surviving_suite_plus_the_survivors(
+    run_on_a_repo_with_its_own_suite,
+):
+    """Metric 6 is before vs after *merging* the survivors.
+
+    Measuring the survivors alone compared a whole suite against a handful of
+    generated tests: the first rehearsal against `cachetools` printed a line
+    coverage delta of -47.4% next to "net new covered lines: 16".
+    """
+    _store, run = run_on_a_repo_with_its_own_suite
+    cov = run["coverage"]
+    assert cov["baseline"]["lines_covered"] > 0, "the existing suite should cover something"
+    assert cov["final"]["lines_covered"] >= cov["baseline"]["lines_covered"]
+    assert cov["final"]["branches_covered"] >= cov["baseline"]["branches_covered"]
+    m6 = run["metrics"]["metric_6_coverage"]
+    assert m6["delta_line_pct"] >= 0
+    assert (
+        cov["final"]["lines_covered"] - cov["baseline"]["lines_covered"]
+        == m6["net_new_covered_lines"]
+    )
+
+
+def test_baseline_and_final_coverage_share_one_denominator(run_on_a_repo_with_its_own_suite):
+    """A target module nobody imported is 0% covered, not absent.
+
+    `tinypkg.other` is imported by no pre-existing test. If the baseline drops
+    it, the baseline and final percentages are over different totals and their
+    difference means nothing.
+    """
+    store, run = run_on_a_repo_with_its_own_suite
+    cov = run["coverage"]
+    assert cov["baseline"]["lines_total"] == cov["final"]["lines_total"]
+    assert cov["baseline"]["branches_total"] == cov["final"]["branches_total"]
+    with open(store.coverage_path("baseline", "xml")) as fh:
+        assert "other.py" in fh.read()
+    assert verify.verify_run(store.root)["ok"]

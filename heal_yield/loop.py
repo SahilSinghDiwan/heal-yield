@@ -176,6 +176,7 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
         out_xml=store.coverage_path("baseline", "xml"),
         out_json=store.coverage_path("baseline", "json"),
         timeout_s=max(config.per_candidate_timeout_s * 10, 600),
+        ignore=GENERATED_DIR,
     )
     coverage_delta.write_summary(store.coverage_path("baseline", "summary.json"), baseline)
 
@@ -334,6 +335,7 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
                 s.healed_at_round = None
 
     # ---------------- final coverage ----------------
+    # "After merging only the surviving tests" (METRICS.md metric 6).
     passed_nodes = [s.c.nodeid for s in states if s.disposition == "passed"]
     final = coverage_delta.measure(
         repo=config.repo_dir,
@@ -342,6 +344,10 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
         out_xml=store.coverage_path("final", "xml"),
         out_json=store.coverage_path("final", "json"),
         timeout_s=max(config.per_candidate_timeout_s * 10, 600),
+        # The project's own surviving suite plus the survivors -- not the
+        # survivors alone. See `coverage_delta.measure`.
+        with_suite=True,
+        ignore=GENERATED_DIR,
     )
     coverage_delta.write_summary(store.coverage_path("final", "summary.json"), final)
 

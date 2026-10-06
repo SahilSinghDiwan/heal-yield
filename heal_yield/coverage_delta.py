@@ -31,13 +31,34 @@ def measure(
     out_json: str,
     timeout_s: float,
     python: Optional[str] = None,
+    with_suite: bool = False,
+    ignore: Optional[str] = None,
 ) -> Dict:
-    """Run pytest under coverage over `targets`, restricted to the modules under test.
+    """Run pytest under coverage, reported over the modules under test.
 
-    `targets` may be empty: that is the baseline with the module's tests
-    deleted and nothing generated yet, and it must still produce a real
-    measurement rather than an assumed zero, because some target lines are
-    executed at import time by other packages' tests.
+    Three shapes, and the difference between them is the metric:
+
+      * `targets` empty -- the **baseline**: whatever of the project's own
+        suite survived the baseline rule. It must be a real measurement rather
+        than an assumed zero, because some target lines are executed by the
+        tests of modules that are not under test.
+      * `targets` with `with_suite=True` -- the **final** figure: that same
+        suite *plus* the surviving candidates. METRICS.md metric 6 is "before
+        vs after **merging** only the surviving tests"; measuring the
+        survivors on their own would compare a whole suite against a handful
+        of tests and report the difference as a loss.
+      * `targets` alone -- one candidate in isolation, for the
+        `no-coverage-increase` disposition.
+
+    `ignore` is a directory the suite run must not collect: the generated
+    tests live inside the checkout, and the candidates that did not survive
+    are still on disk there.
+
+    Coverage is collected with `--source` over the target modules' directories
+    and filtered to the target modules at report time. `--include` at run time
+    would silently drop a module that no test happened to import, so the
+    denominator would change between the baseline and the final measurement
+    and the two percentages would not be comparable.
     """
     os.makedirs(os.path.dirname(out_xml), exist_ok=True)
     exe = python or sys.executable
@@ -45,24 +66,36 @@ def measure(
     env = dict(os.environ)
     env["COVERAGE_FILE"] = data_file
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    if os.path.exists(data_file):
+        os.remove(data_file)
 
     include = ",".join(include_modules) if include_modules else None
-    base = [exe, "-m", "coverage", "run", "--branch"]
-    if include:
-        base += ["--include", include]
-    base += ["-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider"]
-    # An empty `targets` means the baseline: whatever of the project's own
-    # suite survived the baseline rule. That is the honest starting point --
-    # the target modules' tests are gone, everything else still runs, and some
-    # target lines are genuinely executed by other packages' tests.
-    base += list(targets)
+    sources = sorted({os.path.dirname(m) or "." for m in include_modules})
 
+    suite_args = ["--ignore", ignore] if ignore else []
+    if not targets:
+        invocations = [suite_args]
+    elif with_suite:
+        invocations = [suite_args, list(targets)]
+    else:
+        invocations = [list(targets)]
+
+    for i, pytest_args in enumerate(invocations):
+        cmd = [exe, "-m", "coverage", "run", "--branch"]
+        if i:
+            cmd.append("--append")
+        if sources:
+            cmd += ["--source", ",".join(sources)]
+        cmd += ["-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider"]
+        cmd += pytest_args
+        subprocess.run(
+            cmd, cwd=repo, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=timeout_s,
+        )
+
+    report_filter = ["--include", include] if include else []
     subprocess.run(
-        base, cwd=repo, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        timeout=timeout_s,
-    )
-    subprocess.run(
-        [exe, "-m", "coverage", "xml", "-o", out_xml],
+        [exe, "-m", "coverage", "xml", "-o", out_xml] + report_filter,
         cwd=repo, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout_s,
     )
     if not os.path.exists(out_xml):
@@ -73,7 +106,7 @@ def measure(
         # run directory always carries a file `verify` can recompute from.
         write_zero_xml(repo, include_modules, out_xml)
     subprocess.run(
-        [exe, "-m", "coverage", "json", "-o", out_json],
+        [exe, "-m", "coverage", "json", "-o", out_json] + report_filter,
         cwd=repo, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout_s,
     )
     return summarise_xml(out_xml, include_modules)
