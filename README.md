@@ -130,6 +130,14 @@ Notes, in the order they will bite:
   in the report as **your choice, not a heal-yield recommendation**.
 - The ceiling is hard. Tripping it publishes the run in full with `status: truncated`, and a
   truncated run can never be one of the 5 repetitions behind a headline claim.
+- A generator that exits non-zero — no API key, a rate limit, a model id the API no longer
+  serves — ends the run with `status: generator-failed` and exit code 1. It is written in
+  full and is equally barred from a headline claim. The reference generator does **not**
+  retry: a transient API error ends the run, and whatever was spent before it stays spent
+  and stays in the ledger.
+- The model is chosen by the generator's own `--model`, inside `--generator`. The id
+  published in `metadata.yaml` and `report.md` is the one the API reports having served,
+  read from the generator's usage records — not a flag on `heal-yield run`.
 - Run artifacts land under `$HEAL_YIELD_RUNS` (default `../heal-yield-runs/runs`). That
   repository's layout and its append-only policy are specified in
   [RUNS-REPO.md](RUNS-REPO.md); **it has not been created**.
@@ -162,8 +170,8 @@ heal-yield verify --run runs/<dir>
 
 Seven independent checks, reported separately because they fail for different reasons:
 **integrity** (do the artifacts still hash to `SHA256SUMS`?), **ledger** (one enum
-disposition each, summing to N), **evidence** (re-read each execution's raw pytest output and
-re-derive the outcome), **disposition-evidence** (is each disposition entailed by that
+disposition each, summing to N), **evidence** (re-read each execution's raw pytest output —
+every repair round's and each of the flake gate's five — and re-derive the outcome), **disposition-evidence** (is each disposition entailed by that
 candidate's own rounds — `passed` requires a five-pass gate record), **arithmetic** (recompute
 the metrics block), **coverage** (re-read the stored coverage XML), and
 **headline-eligibility**.
@@ -177,9 +185,10 @@ it ever needed to, the tool's central claim would be false.
 python -m pytest -q
 ```
 
-55 tests, entirely offline, against the fixture generator — including an end-to-end run
+62 tests, entirely offline, against the fixture generator — including an end-to-end run
 through the loop, the ledger invariant, the assertion-weakening guard, and the refusal to
-invent either unset limit.
+invent either unset limit. The paid generator is exercised with its one network call
+replaced; no test makes a request.
 
 ## Scope
 
