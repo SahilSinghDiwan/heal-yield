@@ -323,8 +323,9 @@ def test_final_coverage_is_the_surviving_suite_plus_the_survivors(
     """Metric 6 is before vs after *merging* the survivors.
 
     Measuring the survivors alone compared a whole suite against a handful of
-    generated tests: the first rehearsal against `cachetools` printed a line
-    coverage delta of -47.4% next to "net new covered lines: 16".
+    generated tests. A fixture rehearsal (the stub generator, not a model)
+    printed a large negative line-coverage delta next to a positive count of
+    net new covered lines.
     """
     _store, run = run_on_a_repo_with_its_own_suite
     cov = run["coverage"]
@@ -360,8 +361,8 @@ def test_verify_catches_a_passed_backed_by_a_flake_gate_record_nobody_ran(finish
 
     Relabel a candidate that never healed as `passed`, hand it a five-pass
     gate record and recompute the metrics block so the arithmetic agrees. On
-    the first cachetools rehearsal this moved heal yield from 5.3% to 26.3%
-    and `verify` still printed VERIFIED.
+    a fixture rehearsal (the stub generator, not a model) this multiplied the
+    printed heal yield and `verify` still printed VERIFIED.
     """
     from heal_yield import metrics
 

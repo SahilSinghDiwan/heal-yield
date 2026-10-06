@@ -18,6 +18,13 @@ selection_criteria:
   - Pinned to the latest tagged release at manifest time, not to an arbitrary
     `main` HEAD — a tag is a point a reader can `pip download` and diff against.
 
+# NOTE (v0.1, unreconciled): the rule text below is the declaration and is
+# unchanged. The implementation in heal_yield/modules.py differs from it in two
+# ways: it counts statements with its own AST walk, not with coverage.py (close,
+# not identical), and it also skips conftest.py, setup.py and testing/, .tox/,
+# .venv/, build/, docs/ directories. "Take the 5" is an upper bound: a package
+# with fewer eligible modules yields fewer (cachetools yields 4). Each run's
+# modules.json records what was actually applied.
 module_selection_rule: |
   Applied identically to every repo; never hand-picked. Take the 5 source modules
   with the highest statement count, where a module is a .py file under the

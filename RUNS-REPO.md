@@ -39,7 +39,7 @@ commit.
 Written by `heal_yield.runstore.RunStore`; `heal-yield verify` walks exactly this shape.
 
 ```
-runs/2026-10-01-cachetools-4500e3d/
+runs/<YYYY-MM-DD>-<repo>-<sha7>/
   metadata.yaml            run configuration and provenance
   manifest.snapshot.yaml   the exact manifest rows this run used
   modules.json             the mechanical module selection, with its audit trail
@@ -83,7 +83,7 @@ claim. Repetitions of the same repo at the same SHA on the same date are `-r1 �
 ## How a published number cites this repository
 
 Every number in `heal-yield`'s README carries the `heal-yield-runs` **commit SHA** it was
-recomputed from, e.g. *"heal yield 41.2% — recomputed from `heal-yield-runs@a1b2c3d`"*. A
+recomputed from, in the form *"heal yield <value> — recomputed from `heal-yield-runs@<sha>`"*. A
 reader checks it out at that SHA and runs:
 
 ```

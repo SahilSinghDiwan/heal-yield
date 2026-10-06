@@ -73,8 +73,22 @@ The gate is applied once, to the survivor pool, at the end — so a candidate ca
 The three targets were **declared before any run**, along with nine more, in
 [`heal_yield/data/manifest.yaml`](heal_yield/data/manifest.yaml) — that declaration is the
 anti-cherry-picking mechanism. Adding a repo is a versioned manifest bump with a stated
-reason, not a command-line flag. Module lists are derived mechanically (top 5 modules by
-statement count) and never hand-picked. Target modules' existing tests are removed before a
+reason, not a command-line flag. Module lists are derived mechanically and never hand-picked:
+**at most** 5 modules, by statement count, after excluding `__init__.py`, `__main__.py`,
+compat and version shims, anything under a test directory, and any module under 20
+statements. "At most" matters — for `cachetools` the rule yields **4** modules, not 5: the
+package has five source files and the largest, `__init__.py`, is excluded by the rule. Every
+run stores the whole selection in `modules.json`, including each rejected module and why.
+
+Two places where v0.1's implementation is not the manifest's wording, stated here rather than
+left for a reader to find: the manifest says statement counts "come from `coverage.py`", and
+the tool counts statements with its own AST walk (`heal_yield/modules.py`), which is close to
+coverage.py's count but not identical; and the tool additionally skips `conftest.py`,
+`setup.py` and `testing/`, `.tox/`, `.venv/`, `build/`, `docs/` directories, which the
+manifest's rule does not list. Neither has been reconciled yet. `modules.json` records what
+was actually applied.
+
+Target modules' existing tests are removed before a
 run so every target starts from the same baseline; **this is not a claim to improve on the
 maintainers' suites**.
 
