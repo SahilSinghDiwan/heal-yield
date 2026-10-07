@@ -484,7 +484,7 @@ def test_the_paid_generator_records_the_served_model_id_and_the_rate_it_charged(
     """No request is made: `call_model` is replaced. This pins what gets written down."""
     from heal_yield.generators import anthropic_gen
 
-    def fake_call(model, prompt, api_key, max_tokens=8000):
+    def fake_call(model, prompt, api_key, max_tokens=8000, base_url=None):
         return {
             "model": "claude-haiku-4-5-20251001",
             "stop_reason": "end_turn",
@@ -519,3 +519,65 @@ def test_the_paid_generator_refuses_an_unpriced_model_before_any_request(
     with pytest.raises(SystemExit) as refused:
         anthropic_gen.main(_paid_generator_argv(tmp_path, "a-model-nobody-priced"))
     assert "no price on record" in str(refused.value)
+
+
+GATEWAY = "http://localhost:3001"
+
+
+def test_a_claude_id_on_a_non_anthropic_endpoint_is_refused_before_any_request(
+    tmp_path, monkeypatch
+):
+    """A router's `claude-*` slot echoes the id back while a free model answers."""
+    from heal_yield.generators import anthropic_gen
+
+    def must_not_be_called(*_args, **_kwargs):
+        pytest.fail("a request was made under a possibly-mislabelled model id")
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(anthropic_gen, "call_model", must_not_be_called)
+    argv = _paid_generator_argv(tmp_path, "claude-sonnet-4-5") + [
+        "--base-url", GATEWAY, "--unmetered"]
+    with pytest.raises(SystemExit) as refused:
+        anthropic_gen.main(argv)
+    assert "routing slot" in str(refused.value)
+
+
+def test_a_non_anthropic_endpoint_needs_unmetered_rather_than_an_invented_price(
+    tmp_path, monkeypatch
+):
+    from heal_yield.generators import anthropic_gen
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(anthropic_gen, "call_model", lambda *a, **k: pytest.fail("called"))
+    with pytest.raises(SystemExit) as refused:
+        anthropic_gen.main(_paid_generator_argv(tmp_path, "gpt-oss-120b") + ["--base-url", GATEWAY])
+    assert "--unmetered" in str(refused.value)
+
+
+def test_an_unmetered_run_records_the_served_model_and_says_cost_was_not_measured(
+    tmp_path, monkeypatch
+):
+    from heal_yield.generators import anthropic_gen
+
+    seen = {}
+
+    def fake_call(model, prompt, api_key, max_tokens=8000, base_url=None):
+        seen["base_url"] = base_url
+        return {
+            "model": "gpt-oss-120b",
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 1000, "output_tokens": 2000},
+            "content": [{"type": "text", "text": "```python\ndef test_f():\n    assert 1\n```"}],
+        }
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "not-a-real-key")
+    monkeypatch.delenv("HEAL_YIELD_ARTIFACT_DIR", raising=False)
+    monkeypatch.setattr(anthropic_gen, "call_model", fake_call)
+    argv = _paid_generator_argv(tmp_path, "gpt-oss-120b") + ["--base-url", GATEWAY, "--unmetered"]
+    assert anthropic_gen.main(argv) == 0
+    with open(str(tmp_path / "usage.json")) as fh:
+        meta = json.load(fh)
+    assert seen["base_url"] == GATEWAY
+    assert meta["model"] == "gpt-oss-120b"
+    assert meta["cost_basis"] == "unmetered"
+    assert meta["pricing_usd_per_mtok"] is None

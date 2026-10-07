@@ -31,7 +31,7 @@ from typing import Dict, List, Optional, Tuple
 
 from ._contract import parse_args, read_feedback, read_source, write_meta
 
-API_URL = "https://api.anthropic.com/v1/messages"
+API_BASE = "https://api.anthropic.com"
 API_VERSION = "2023-06-01"
 
 #: USD per million tokens. Recorded in the run so a reader can re-derive every
@@ -94,7 +94,30 @@ def build_prompt(module: str, source: str, feedback: str, round_index: int) -> s
     )
 
 
-def call_model(model: str, prompt: str, api_key: str, max_tokens: int = 8000) -> Dict:
+def check_gateway(model: str, base_url: str, unmetered: bool) -> None:
+    """Refuse the two ways a non-Anthropic endpoint could mislabel a run.
+
+    A router that exposes `claude-*` ids as slots auto-routed to some free model
+    echoes the requested id back as the served model, so a run would be
+    published as Claude when no Claude ever answered. And an unpriced model may
+    only run when the operator says out loud that its cost is not measured.
+    """
+    if base_url.rstrip("/") != API_BASE:
+        if model.startswith("claude-"):
+            raise SystemExit(
+                "refusing model %r on %s: a claude-* id on a non-Anthropic endpoint "
+                "may be a routing slot, and the response would label the run with a "
+                "model that never answered. Name the real model." % (model, base_url)
+            )
+        if not unmetered:
+            raise SystemExit(
+                "%s is not api.anthropic.com; pass --unmetered to record cost as "
+                "unmetered rather than invent a price." % base_url
+            )
+
+
+def call_model(model: str, prompt: str, api_key: str, max_tokens: int = 8000,
+               base_url: str = API_BASE) -> Dict:
     body = json.dumps(
         {
             "model": model,
@@ -105,7 +128,7 @@ def call_model(model: str, prompt: str, api_key: str, max_tokens: int = 8000) ->
         }
     ).encode("utf-8")
     req = urllib.request.Request(
-        API_URL,
+        base_url.rstrip("/") + "/v1/messages",
         data=body,
         headers={
             "content-type": "application/json",
@@ -132,6 +155,17 @@ def _extend(parser) -> None:
         default=os.environ.get("HEAL_YIELD_MODEL", DEFAULT_MODEL),
         help="dated model id; must have a row in PRICING or the run refuses to start",
     )
+    parser.add_argument(
+        "--base-url",
+        default=os.environ.get("HEAL_YIELD_BASE_URL", API_BASE),
+        help="Messages-API endpoint (default: api.anthropic.com)",
+    )
+    parser.add_argument(
+        "--unmetered",
+        action="store_true",
+        help="record cost as unmetered (0.0, flagged) instead of pricing the model; "
+             "only for a free endpoint, and only with a non-claude-* model id",
+    )
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -148,7 +182,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # Before the request, not after it: an unpriced model must refuse to start,
     # not be billed and then fail to record what it cost.
-    pricing_for(model)
+    check_gateway(model, args.base_url, args.unmetered)
+    if not args.unmetered:
+        pricing_for(model)
 
     source = read_source(args.repo, args.source_file)
     feedback = read_feedback(args.feedback_file)
@@ -161,7 +197,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                    "prompt": prompt}, fh, indent=2)
 
     try:
-        response = call_model(model, prompt, api_key)
+        response = call_model(model, prompt, api_key, base_url=args.base_url)
     except urllib.error.HTTPError as exc:
         sys.stderr.write("model call failed: %s %s\n" % (exc.code, exc.read()[:2000]))
         write_meta(args.meta_out, model, 0, 0, 0.0, {"error": "http %s" % exc.code})
@@ -173,7 +209,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     usage = response.get("usage", {})
     prompt_tokens = int(usage.get("input_tokens", 0))
     completion_tokens = int(usage.get("output_tokens", 0))
-    usd = price(model, prompt_tokens, completion_tokens)
+    usd = 0.0 if args.unmetered else price(model, prompt_tokens, completion_tokens)
 
     text = "".join(
         block.get("text", "") for block in response.get("content", [])
@@ -193,7 +229,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         args.meta_out, served_model, prompt_tokens, completion_tokens, usd,
         {"round": args.round, "emitted": bool(code), "requested_model": model,
          "stop_reason": response.get("stop_reason"),
-         "pricing_usd_per_mtok": list(pricing_for(model))},
+         "base_url": args.base_url,
+         "cost_basis": "unmetered" if args.unmetered else "priced",
+         "pricing_usd_per_mtok": None if args.unmetered else list(pricing_for(model))},
     )
     return 0
 
