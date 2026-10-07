@@ -596,3 +596,14 @@ def test_an_unmetered_ledger_reports_unknown_cost_never_zero():
     old = UsageRecord.from_dict({"round": 0, "module": "m", "prompt_tokens": 1,
                                  "completion_tokens": 1, "usd": 0.5, "model": "x"})
     assert old.metered is True, "records written before this field existed were priced"
+
+
+def test_verify_accepts_a_metrics_block_written_before_cost_basis_existed(finished_run):
+    """Published runs are append-only: old blocks lack the newer key and must still verify."""
+    store, run = finished_run
+    legacy = json.loads(json.dumps(run))
+    legacy["metrics"]["metric_8_cost"].pop("cost_basis")
+    check = verify._check_arithmetic(legacy)
+    assert check.ok, check.problems
+    legacy["metrics"]["metric_8_cost"]["total_usd"] = 123.0
+    assert not verify._check_arithmetic(legacy).ok, "a real disagreement is still caught"

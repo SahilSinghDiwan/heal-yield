@@ -263,6 +263,10 @@ def _check_arithmetic(run: Dict) -> Check:
     if not published:
         return Check("arithmetic", False, "run.json carries no published metrics block")
     recomputed = metrics_mod.compute(run)
+    # Runs written before `cost_basis` existed carry no such key. Absent means
+    # "priced" (the only basis then); the key is not an arithmetic disagreement.
+    if "cost_basis" not in published.get("metric_8_cost", {}):
+        recomputed["metric_8_cost"].pop("cost_basis", None)
     problems = []
     for key in sorted(recomputed):
         if published.get(key) != recomputed[key]:
