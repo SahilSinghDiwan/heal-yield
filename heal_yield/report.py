@@ -111,7 +111,11 @@ def render(run: Dict, metrics: Dict, runs_sha: Optional[str] = None) -> str:
     a("")
     a("| | Value |")
     a("|---|---|")
-    a("| Total | %s |" % _usd(m8["total_usd"]))
+    if m8.get("cost_basis") == "unmetered":
+        a("| Cost basis | **unmetered** - the endpoint reported no price; "
+          "this is NOT a cost of $0 |")
+    unmetered = m8.get("cost_basis") == "unmetered"
+    a("| Total | %s |" % ("unmetered" if unmetered else _usd(m8["total_usd"])))
     a("| Prompt tokens | %d |" % m8["prompt_tokens"])
     a("| Completion tokens | %d |" % m8["completion_tokens"])
     a("| Per-run ceiling (operator choice) | %s |" % _usd(m8["ceiling_usd"]))
@@ -125,8 +129,9 @@ def render(run: Dict, metrics: Dict, runs_sha: Optional[str] = None) -> str:
     a("|---|---|---|---|---|")
     for r in sorted(m8["by_round"], key=lambda x: int(x)):
         b = m8["by_round"][r]
+        usd = "unmetered" if unmetered else _usd(b["usd"])
         a("| %s | %s | %d | %d | %d |"
-          % (r, _usd(b["usd"]), b["prompt_tokens"], b["completion_tokens"], b["calls"]))
+          % (r, usd, b["prompt_tokens"], b["completion_tokens"], b["calls"]))
     if not m8["by_round"]:
         a("| - | n/a | 0 | 0 | 0 |")
     a("")

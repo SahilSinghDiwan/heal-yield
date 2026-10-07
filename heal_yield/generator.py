@@ -130,5 +130,6 @@ class Generator(object):
             completion_tokens=meta.get("completion_tokens", 0),
             usd=meta.get("usd", 0.0),
             model=meta.get("model"),
+            metered=meta.get("cost_basis") != "unmetered",
         )
         return GeneratorResult(returncode, usage, stdout, stderr, meta)

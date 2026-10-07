@@ -111,14 +111,17 @@ def compute(run: Dict) -> Dict:
         },
         "metric_7_mutation_score": DEFERRED["mutation_score"],
         "metric_8_cost": {
-            "total_usd": round(ledger.spent, 6),
+            "cost_basis": "priced" if ledger.metered else "unmetered",
+            "total_usd": round(ledger.spent, 6) if ledger.metered else None,
             "prompt_tokens": sum(r.prompt_tokens for r in ledger.records),
             "completion_tokens": sum(r.completion_tokens for r in ledger.records),
             "by_round": ledger.by_round(),
             "ceiling_usd": ledger.ceiling_usd,
             "ceiling_tripped": ledger.tripped,
-            "usd_per_surviving_test": cost_derived["usd_per_surviving_test"],
-            "usd_per_net_new_covered_line": cost_derived["usd_per_net_new_covered_line"],
+            "usd_per_surviving_test": (
+                cost_derived["usd_per_surviving_test"] if ledger.metered else None),
+            "usd_per_net_new_covered_line": (
+                cost_derived["usd_per_net_new_covered_line"] if ledger.metered else None),
         },
         "metric_9_dispositions": {
             "ledger": ledger_counts,

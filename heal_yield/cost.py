@@ -28,15 +28,19 @@ class CeilingTripped(Exception):
 class UsageRecord(object):
     """One model call, attributed to the repair round that made it."""
 
-    __slots__ = ("round", "module", "prompt_tokens", "completion_tokens", "usd", "model")
+    __slots__ = ("round", "module", "prompt_tokens", "completion_tokens", "usd", "model", "metered")
 
-    def __init__(self, round, module, prompt_tokens, completion_tokens, usd, model):
+    def __init__(self, round, module, prompt_tokens, completion_tokens, usd, model, metered=True):
         self.round = round
         self.module = module
         self.prompt_tokens = int(prompt_tokens)
         self.completion_tokens = int(completion_tokens)
         self.usd = float(usd)
         self.model = model
+        #: False when the endpoint reported no price (a free gateway). Such a
+        #: record's `usd` is 0.0 only as a placeholder and must never be read
+        #: or published as a cost of zero.
+        self.metered = bool(metered)
 
     def to_dict(self) -> Dict:
         return {
@@ -46,6 +50,7 @@ class UsageRecord(object):
             "completion_tokens": self.completion_tokens,
             "usd": self.usd,
             "model": self.model,
+            "metered": self.metered,
         }
 
     @classmethod
@@ -57,6 +62,7 @@ class UsageRecord(object):
             d["completion_tokens"],
             d["usd"],
             d.get("model"),
+            d.get("metered", True),
         )
 
 
@@ -67,6 +73,11 @@ class CostLedger(object):
         self.ceiling_usd = float(ceiling_usd)
         self.records: List[UsageRecord] = []
         self.tripped = False
+
+    @property
+    def metered(self) -> bool:
+        """False if any call was unmetered: the dollar totals are then unknown, not zero."""
+        return all(r.metered for r in self.records)
 
     @property
     def spent(self) -> float:
@@ -96,7 +107,10 @@ class CostLedger(object):
             bucket = out.setdefault(
                 key, {"usd": 0.0, "prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
             )
-            bucket["usd"] += r.usd
+            bucket["usd"] = (
+                bucket["usd"] + r.usd
+                if bucket["usd"] is not None and r.metered else None
+            )
             bucket["prompt_tokens"] += r.prompt_tokens
             bucket["completion_tokens"] += r.completion_tokens
             bucket["calls"] += 1

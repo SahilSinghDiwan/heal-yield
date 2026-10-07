@@ -581,3 +581,18 @@ def test_an_unmetered_run_records_the_served_model_and_says_cost_was_not_measure
     assert meta["model"] == "gpt-oss-120b"
     assert meta["cost_basis"] == "unmetered"
     assert meta["pricing_usd_per_mtok"] is None
+
+
+def test_an_unmetered_ledger_reports_unknown_cost_never_zero():
+    from heal_yield.cost import CostLedger, UsageRecord
+
+    ledger = CostLedger(1.0)
+    ledger.record(UsageRecord(0, "m", 10, 20, 0.0, "gpt-oss-120b", metered=False))
+    ledger.record(UsageRecord(1, "m", 10, 20, 0.0, "gpt-oss-120b", metered=False))
+    assert ledger.metered is False
+    assert all(b["usd"] is None for b in ledger.by_round().values())
+    again = CostLedger.from_dict(ledger.to_dict())
+    assert again.metered is False, "survives the run.json round trip"
+    old = UsageRecord.from_dict({"round": 0, "module": "m", "prompt_tokens": 1,
+                                 "completion_tokens": 1, "usd": 0.5, "model": "x"})
+    assert old.metered is True, "records written before this field existed were priced"
