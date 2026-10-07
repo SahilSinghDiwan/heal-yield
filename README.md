@@ -18,11 +18,14 @@ measure a tool it did not ship.
 
 Read this before reading anything else in this repository.
 
-The harness is built and its test suite is green against an offline fixture generator. **No
-paid model run has been executed.** There are therefore **no results** here — not a
-provisional table, not an illustrative figure, not a number to be refined later. The table
-under [Results](#results) says `not yet measured` in every cell, and it will keep saying that
-until a run exists and the artifact SHA it came from can be cited.
+The harness is built and its test suite is green against an offline fixture generator. **Two
+repetitions of one configuration have been run**, and they disagree: `cachetools`, model
+`gpt-oss-120b` reached through a free multi-provider gateway, heal yield **15.8%** in one and
+**44.4%** in the other. **No headline number is claimed**: the design needs 5 repetitions per
+repo, there are 2, and cost was *unmetered* (the endpoint reports no price), which is not
+zero. `packaging` and `textdistance` have not been run. The artifacts, with the caveats in
+full, are in [`heal-yield-runs`](https://github.com/SahilSinghDiwan/heal-yield-runs) at
+`f85aebd`.
 
 Two limits are **declared-as-unset** for the same reason:
 
@@ -31,7 +34,9 @@ Two limits are **declared-as-unset** for the same reason:
 | Per-run USD ceiling | tripping it truncates the run, loudly | **not yet measured** |
 | Per-candidate time limit | exceeding it is disposition `timeout` | **not yet measured** |
 
-Both are meant to be fixed from an *observed* run. None has been observed, so the tool has
+Both are meant to be fixed from an *observed* run. The two runs above used a ceiling of $1
+(inert, as cost was unmetered) and a 120 s limit, both **the operator's choice**, not
+measured values, so the tool still has
 **no default for either** — `heal-yield run` requires both on the command line and exits
 rather than choosing for you. See [METRICS.md](METRICS.md), *Declared-as-unset values*.
 
@@ -66,7 +71,8 @@ The gate is applied once, to the survivor pool, at the end — so a candidate ca
 
 | Repo | N | First-pass green | Post-heal green | Heal yield | Cost | Run SHA |
 |---|---|---|---|---|---|---|
-| `cachetools` | not yet measured | not yet measured | not yet measured | not yet measured | not yet measured | — |
+| `cachetools` r1 | 26 | 26.9% | 38.5% | 15.8% (3 of 19) | unmetered | `heal-yield-runs@f85aebd` |
+| `cachetools` r2 | 25 | 28.0% | 60.0% | 44.4% (8 of 18) | unmetered | `heal-yield-runs@f85aebd` |
 | `packaging` | not yet measured | not yet measured | not yet measured | not yet measured | not yet measured | — |
 | `textdistance` | not yet measured | not yet measured | not yet measured | not yet measured | not yet measured | — |
 
