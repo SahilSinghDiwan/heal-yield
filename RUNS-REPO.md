@@ -24,7 +24,7 @@ heal-yield-runs/
   INDEX.md             one line per run: dir, repo, sha, status, headline-eligible, date
   index.json           the same, machine-readable; INDEX.md is rendered from it
   manifests/
-    1.0.0.yaml         every manifest version ever run, frozen by version
+    1.0.1.yaml         every manifest version ever run, frozen by version
   runs/
     <YYYY-MM-DD>-<repo>-<sha7>[-r<rep>]/
   .github/workflows/verify.yml   runs `heal-yield verify` over every run directory

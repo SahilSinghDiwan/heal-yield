@@ -1,11 +1,11 @@
-# heal-yield benchmark manifest — v1.0.0
+# heal-yield benchmark manifest — v1.0.1
 # Declared 2026-09-14, BEFORE any run. Ticket 07.
 #
 # This file is the anti-cherry-picking mechanism. The full set is declared up
 # front; v1 runs three of them and marks the rest "declared, not yet run".
 # Changing this file is a versioned event — see `policy` at the bottom.
 
-manifest_version: 1.0.0
+manifest_version: 1.0.1
 declared: 2026-09-14
 
 selection_criteria:
@@ -28,11 +28,15 @@ selection_criteria:
 module_selection_rule: |
   Applied identically to every repo; never hand-picked. Take the 5 source modules
   with the highest statement count, where a module is a .py file under the
-  package root, excluding: __init__.py, __main__.py, anything matching
-  _compat*/compat*/_version*/version*, anything under a tests/ or test/ path,
-  and any module with fewer than 20 statements. Ties broken by path, ascending.
-  Statement counts come from `coverage.py` on the pinned SHA. A reader can
-  derive the exact module list from the SHA alone.
+  package root, excluding: __init__.py, __main__.py, conftest.py, setup.py,
+  anything matching _compat*/compat*/_version*/version*, anything under a
+  tests/, test/, testing/, .tox/, .venv/, build/ or docs/ directory, and any
+  module with fewer than 20 statements. Ties broken by path, ascending.
+  Statement counts come from heal-yield's own AST walk (heal_yield/modules.py),
+  which approximates coverage.py's statement definition and is NOT identical to
+  it. A reader can derive the exact module list from the SHA and that code alone.
+  (v1.0.0 said the counts came from coverage.py; that was wrong. Amended in
+  v1.0.1 before any run existed.)
 
 baseline_rule: |
   Before a run, the target module's existing tests are removed, and baseline

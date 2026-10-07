@@ -80,13 +80,11 @@ statements. "At most" matters — for `cachetools` the rule yields **4** modules
 package has five source files and the largest, `__init__.py`, is excluded by the rule. Every
 run stores the whole selection in `modules.json`, including each rejected module and why.
 
-Two places where v0.1's implementation is not the manifest's wording, stated here rather than
-left for a reader to find: the manifest says statement counts "come from `coverage.py`", and
-the tool counts statements with its own AST walk (`heal_yield/modules.py`), which is close to
-coverage.py's count but not identical; and the tool additionally skips `conftest.py`,
-`setup.py` and `testing/`, `.tox/`, `.venv/`, `build/`, `docs/` directories, which the
-manifest's rule does not list. Neither has been reconciled yet. `modules.json` records what
-was actually applied.
+Statement counts come from `heal_yield/modules.py`'s own AST walk, which approximates but is
+not identical to coverage.py's; the tool also skips `conftest.py`, `setup.py` and `testing/`,
+`.tox/`, `.venv/`, `build/`, `docs/` directories. The manifest's rule text says exactly this
+as of v1.0.1 (v1.0.0 wrongly said the counts came from coverage.py; it was amended before any
+run existed). `modules.json` records what was actually applied.
 
 Target modules' existing tests are removed before a
 run so every target starts from the same baseline; **this is not a claim to improve on the
