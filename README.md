@@ -18,14 +18,15 @@ measure a tool it did not ship.
 
 Read this before reading anything else in this repository.
 
-The harness is built and its test suite is green against an offline fixture generator. **Two
-repetitions of one configuration have been run**, and they disagree: `cachetools`, model
-`gpt-oss-120b` reached through a free multi-provider gateway, heal yield **15.8%** in one and
-**44.4%** in the other. **No headline number is claimed**: the design needs 5 repetitions per
-repo, there are 2, and cost was *unmetered* (the endpoint reports no price), which is not
-zero. `packaging` and `textdistance` have not been run. The artifacts, with the caveats in
-full, are in [`heal-yield-runs`](https://github.com/SahilSinghDiwan/heal-yield-runs) at
-`f85aebd`.
+The harness is built and its test suite is green against an offline fixture generator. **Six
+runs of one configuration have been made, five complete**: `cachetools`, model `gpt-oss-120b`
+reached through a free multi-provider gateway. Heal yield across the five complete runs was
+**9.5%–52.9%** (median 36.8%); first-pass green was **26.9%–37.0%**. The claim is the spread: a
+single run's heal yield on this setup is not the tool's heal yield. One run failed on a gateway
+error and was replaced; it is kept and disclosed. Cost was *unmetered* (the endpoint reports no
+price), which is not zero. `packaging` and `textdistance` have not been run. The artifacts, with
+the caveats in full, are in [`heal-yield-runs`](https://github.com/SahilSinghDiwan/heal-yield-runs)
+at `b5e78d0`.
 
 Two limits are **declared-as-unset** for the same reason:
 
@@ -71,8 +72,12 @@ The gate is applied once, to the survivor pool, at the end — so a candidate ca
 
 | Repo | N | First-pass green | Post-heal green | Heal yield | Cost | Run SHA |
 |---|---|---|---|---|---|---|
-| `cachetools` r1 | 26 | 26.9% | 38.5% | 15.8% (3 of 19) | unmetered | `heal-yield-runs@f85aebd` |
-| `cachetools` r2 | 25 | 28.0% | 60.0% | 44.4% (8 of 18) | unmetered | `heal-yield-runs@f85aebd` |
+| `cachetools` r1 | 26 | 26.9% | 38.5% | 15.8% (3 of 19) | unmetered | `heal-yield-runs@b5e78d0` |
+| `cachetools` r2 | 25 | 28.0% | 60.0% | 44.4% (8 of 18) | unmetered | `heal-yield-runs@b5e78d0` |
+| `cachetools` r3 | 30 | 30.0% | 36.7% | 9.5% (2 of 21) | unmetered | `heal-yield-runs@b5e78d0` |
+| `cachetools` r4 | 29 | 34.5% | 58.6% | 36.8% (7 of 19) | unmetered | `heal-yield-runs@b5e78d0` |
+| `cachetools` r6 | 27 | 37.0% | 70.4% | 52.9% (9 of 17) | unmetered | `heal-yield-runs@b5e78d0` |
+| `cachetools` r5 | — | `generator-failed` (gateway 502), not eligible; replaced by r6 | | | unmetered | `heal-yield-runs@b5e78d0` |
 | `packaging` | not yet measured | not yet measured | not yet measured | not yet measured | not yet measured | — |
 | `textdistance` | not yet measured | not yet measured | not yet measured | not yet measured | not yet measured | — |
 
