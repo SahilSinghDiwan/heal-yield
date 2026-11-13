@@ -37,6 +37,35 @@ numbers mean — but it has one consequence, stated here rather than buried:
 > A candidate may pass once at round 0, enter the survivor pool, and then fail
 > the terminal 5-run gate. It is **not** a first-pass success.
 
+## The repair round
+
+Only **failing** candidates enter a repair round. Their captured output is the
+feedback, and only they are judged by the assertion-weakening guard. A
+candidate that currently passes is not shown to the model, and its function is
+**carried forward unchanged**: after the repair, each passing function is
+restored byte for byte from the previous file, in place if the repair still
+defines it and appended if the repair dropped it. The model's own emission is
+kept under `raw/generated/<module>/round-<n>/`; the file that actually ran,
+when it differs, is stored beside it under `carried-forward/`. Module-level
+code (imports, helpers, fixtures) is the repair's, so every undecided candidate
+is re-run after each repair and a passing test broken by that change is
+recorded as failing.
+
+If the repaired file **does not parse**, there is nothing to splice the passing
+functions into. The previous file is put back whole, so the passing tests
+survive; the failing candidates are re-run in their previous form and judged on
+that (typically ending in `no-progress-abort`). The unparseable emission stays
+in `raw/generated/` as evidence.
+
+**The loop ends early when nothing is failing.** A round with no failing
+candidate makes no repair call and runs nothing; the remaining candidates go
+straight to the flake gate. This is a change from this version on: earlier
+runs (including r1–r6 in `heal-yield-runs`) re-ran every undecided candidate in
+every round up to `k`, so a candidate in a run written by this version can
+carry **fewer per-round execution records** than one in an earlier run. No
+metric's definition changes; only the number of `run` records per candidate
+does.
+
 ## The metrics
 
 **1. Generated candidates (N).** Distinct test functions emitted before any
