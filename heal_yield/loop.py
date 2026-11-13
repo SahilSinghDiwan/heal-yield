@@ -20,7 +20,7 @@ import shutil
 from typing import Dict, List, Optional
 
 from . import candidates as cand_mod
-from . import coverage_delta, dispositions, guard, metrics
+from . import carry_forward, coverage_delta, dispositions, guard, metrics
 from .cost import CeilingTripped, CostLedger
 from .generator import Generator
 from .pytest_harness import run_pytest
@@ -289,7 +289,14 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
             if not active:
                 break
             if round_index > 0:
-                _repair(config, store, generator, ledger, active, round_index)
+                # Only failing candidates are repaired. A passing one is not
+                # put in front of the model at all, and its function is
+                # carried forward unchanged through the repair of its file.
+                failing = [s for s in active if s.healed_at_round is None]
+                if not failing:
+                    break
+                _repair(config, store, generator, ledger, failing, round_index,
+                        passing=[s for s in active if s.healed_at_round is not None])
                 ledger.check_ceiling()
                 active = [s for s in states if s.disposition is None]
 
@@ -467,11 +474,21 @@ def _install(out_dir: str, gen_root: str, module: str) -> List[str]:
     return installed
 
 
-def _repair(config, store, generator, ledger, active, round_index) -> None:
-    """One repair round: re-prompt per module carrying the captured output."""
+def _repair(config, store, generator, ledger, active, round_index, passing=()) -> None:
+    """One repair round: re-prompt per module carrying the captured output.
+
+    `active` is the failing candidates; only they are put in the feedback and
+    judged by the guard. `passing` are candidates that currently pass: each
+    one's function is restored from the previous file after the repair, so a
+    repair that dropped or rewrote it cannot cost the run a passing test.
+    """
     by_module: Dict[str, List] = {}
     for s in active:
         by_module.setdefault(s.c.module, []).append(s)
+    keep_by_file: Dict[str, List[str]] = {}
+    for s in passing:
+        if s.c.file:
+            keep_by_file.setdefault(s.c.file, []).append(s.c.qualname)
 
     for module, group in sorted(by_module.items()):
         feedback_path = os.path.join(store.model_dir(module, round_index), "feedback.txt")
@@ -489,11 +506,13 @@ def _repair(config, store, generator, ledger, active, round_index) -> None:
                 fh.write("\n\n")
 
         before_sources = {}
-        for s in group:
-            full = os.path.join(config.repo_dir, s.c.file)
+        module_files = {s.c.file for s in group} | {
+            s.c.file for s in passing if s.c.module == module and s.c.file}
+        for rel in sorted(module_files):
+            full = os.path.join(config.repo_dir, rel)
             if os.path.exists(full):
                 with open(full) as fh:
-                    before_sources[s.c.file] = fh.read()
+                    before_sources[rel] = fh.read()
 
         out_dir = store.generated_dir(module, round_index)
         _invoke(
@@ -512,8 +531,22 @@ def _repair(config, store, generator, ledger, active, round_index) -> None:
         emitted = _install(out_dir, gen_root, module)
         after_sources = {}
         for rel in emitted:
-            with open(os.path.join(config.repo_dir, rel)) as fh:
+            full = os.path.join(config.repo_dir, rel)
+            with open(full) as fh:
                 after_sources[rel] = fh.read()
+            keep = keep_by_file.get(rel)
+            if keep and rel in before_sources:
+                merged = carry_forward.splice(before_sources[rel], after_sources[rel], keep)
+                if merged != after_sources[rel]:
+                    # The model's own file stays under raw/generated/ as it was
+                    # emitted; what actually ran is stored beside it.
+                    carried = os.path.join(out_dir, "carried-forward")
+                    os.makedirs(carried, exist_ok=True)
+                    with open(os.path.join(carried, os.path.basename(rel)), "w") as fh:
+                        fh.write(merged)
+                    with open(full, "w") as fh:
+                        fh.write(merged)
+                    after_sources[rel] = merged
 
         for s in group:
             after = after_sources.get(s.c.file)
