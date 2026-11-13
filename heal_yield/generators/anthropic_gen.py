@@ -90,7 +90,10 @@ def build_prompt(module: str, source: str, feedback: str, round_index: int) -> s
         "delete a failing test, weaken an assertion to something trivially true, "
         "or add skip/xfail -- those are rejected by the harness and counted "
         "against the run. Emit the complete corrected file."
-        % (module, source, feedback[-12000:])
+        # Not truncated here: the harness already budgets the feedback per
+        # failing candidate (loop.render_feedback). Cutting the whole file
+        # again would drop the first candidates' sections entirely.
+        % (module, source, feedback)
     )
 
 

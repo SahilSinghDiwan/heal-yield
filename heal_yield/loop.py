@@ -458,6 +458,50 @@ def _outcome_for(outcomes: Dict[str, str], candidate) -> str:
     return outcome_for(outcomes, candidate.file, candidate.qualname)
 
 
+#: Total characters of captured output in one module's repair feedback. Split
+#: evenly across the failing candidates, never below the per-candidate floor,
+#: so every candidate's failure message survives however many there are.
+FEEDBACK_BUDGET_CHARS = 12000
+FEEDBACK_MIN_PER_CANDIDATE = 1200
+
+
+def _excerpt(artifact_text: str, budget: int) -> str:
+    """One candidate's captured output, cut to `budget` characters.
+
+    The harness's own header (the command line, cwd, return code) is dropped:
+    it is evidence for a reader, not feedback for the model. If the rest is
+    still too long, the assertion lines (`E ...`, `>`) are kept first and the
+    remaining budget is the tail of the output, where pytest prints the
+    failing line and the summary.
+    """
+    body = artifact_text
+    marker = "--- stdout ---\n"
+    if marker in body:
+        body = body.split(marker, 1)[1]
+    body = body.replace("\n--- stderr ---\n", "\n").rstrip() + "\n"
+    if len(body) <= budget:
+        return body
+    key = [ln for ln in body.splitlines() if ln.startswith(("E ", ">"))]
+    key_text = "\n".join(key)
+    if len(key_text) > budget // 2:
+        key_text = key_text[-(budget // 2):]
+    tail_room = max(budget - len(key_text) - 48, 0)
+    tail = body[-tail_room:] if tail_room else ""
+    omitted = "[... %d characters omitted ...]\n" % (len(body) - len(tail))
+    return (key_text + "\n" if key_text else "") + omitted + tail
+
+
+def render_feedback(sections: List) -> str:
+    """The feedback file for one module: one `### <id>` section per failing candidate."""
+    if not sections:
+        return ""
+    per = max(FEEDBACK_BUDGET_CHARS // len(sections), FEEDBACK_MIN_PER_CANDIDATE)
+    out = []
+    for cid, text in sections:
+        out.append("### %s\n%s\n" % (cid, _excerpt(text, per)))
+    return "\n".join(out)
+
+
 def _install(out_dir: str, gen_root: str, module: str) -> List[str]:
     """Copy what the generator emitted into the checkout, return repo-relative paths."""
     installed = []
@@ -490,17 +534,19 @@ def _repair(config, store, generator, ledger, active, round_index, passing=()) -
     for module, group in sorted(by_module.items()):
         feedback_path = os.path.join(store.model_dir(module, round_index), "feedback.txt")
         os.makedirs(os.path.dirname(feedback_path), exist_ok=True)
+        sections = []
+        for s in group:
+            last = [r for r in s.rounds if r.get("phase") == "run"]
+            if not last:
+                continue
+            art = store.path(last[-1]["artifact"])
+            text = ""
+            if os.path.exists(art):
+                with open(art, errors="replace") as src:
+                    text = src.read()
+            sections.append((s.c.id, text))
         with open(feedback_path, "w") as fh:
-            for s in group:
-                last = [r for r in s.rounds if r.get("phase") == "run"]
-                if not last:
-                    continue
-                art = store.path(last[-1]["artifact"])
-                fh.write("### %s\n" % s.c.id)
-                if os.path.exists(art):
-                    with open(art, errors="replace") as src:
-                        fh.write(src.read()[-8000:])
-                fh.write("\n\n")
+            fh.write(render_feedback(sections))
 
         before_sources = {}
         module_files = {s.c.file for s in group} | {
