@@ -78,6 +78,42 @@ def _parse_report_log(path: str) -> Dict[str, str]:
     return outcomes
 
 
+def _strip_params(nodeid: str) -> str:
+    """`a.py::test_p[x-1]` -> `a.py::test_p`. The `[` is searched after the path."""
+    sep = nodeid.find("::")
+    if sep < 0:
+        return nodeid
+    bracket = nodeid.find("[", sep)
+    return nodeid if bracket < 0 else nodeid[:bracket]
+
+
+def outcome_for(outcomes: Dict[str, str], file: str, qualname: str) -> str:
+    """One candidate's outcome, read from `{nodeid: outcome}`.
+
+    The match is on the whole node path -- file and qualname -- after the
+    parameter suffix is removed, so a parametrized family is found and a
+    same-named test in another file is not. pytest may report ids relative
+    to a rootdir above the checkout, so a `<prefix>/` before the file is
+    allowed. A family passes only if every case passed; any failed case makes
+    it failed; otherwise the first other outcome (e.g. `skipped`) is returned.
+    A candidate with no matching id is failed.
+    """
+    target = "%s::%s" % (file, qualname.replace(".", "::"))
+    found: List[str] = []
+    for nodeid, outcome in outcomes.items():
+        base = _strip_params(nodeid)
+        if base == target or base.endswith("/" + target):
+            found.append(outcome)
+    if not found:
+        return "failed"
+    if "failed" in found:
+        return "failed"
+    for outcome in found:
+        if outcome != "passed":
+            return outcome
+    return "passed"
+
+
 def run_pytest(
     cwd: str,
     targets: List[str],

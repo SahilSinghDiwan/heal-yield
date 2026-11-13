@@ -31,7 +31,7 @@ from typing import Dict, List, Optional
 from . import coverage_delta
 from . import dispositions as disp
 from . import metrics as metrics_mod
-from .pytest_harness import read_execution
+from .pytest_harness import outcome_for, read_execution
 from .runstore import RunStore
 
 
@@ -251,11 +251,7 @@ def _check_disposition_evidence(run: Dict) -> Check:
 
 
 def _outcome_from(outcomes: Dict[str, str], candidate: Dict) -> str:
-    suffix = candidate["qualname"].replace(".", "::")
-    for nodeid, outcome in outcomes.items():
-        if nodeid.endswith(suffix):
-            return outcome
-    return "failed"
+    return outcome_for(outcomes, candidate["file"], candidate["qualname"])
 
 
 def _check_arithmetic(run: Dict) -> Check:

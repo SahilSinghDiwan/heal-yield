@@ -23,7 +23,7 @@ from . import candidates as cand_mod
 from . import carry_forward, coverage_delta, dispositions, guard, metrics
 from .cost import CeilingTripped, CostLedger
 from .generator import Generator
-from .pytest_harness import run_pytest
+from .pytest_harness import outcome_for, run_pytest
 from .runstore import RunStore
 
 #: Where generated tests are written inside the target checkout. One directory,
@@ -455,10 +455,7 @@ def _fslug(text: str) -> str:
 
 
 def _outcome_for(outcomes: Dict[str, str], candidate) -> str:
-    for nodeid, outcome in outcomes.items():
-        if nodeid.endswith(candidate.qualname.replace(".", "::")):
-            return outcome
-    return "failed"
+    return outcome_for(outcomes, candidate.file, candidate.qualname)
 
 
 def _install(out_dir: str, gen_root: str, module: str) -> List[str]:
