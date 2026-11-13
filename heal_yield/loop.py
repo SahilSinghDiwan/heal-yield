@@ -185,7 +185,8 @@ def failure_signature(text: str) -> str:
 
 def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: str) -> Dict:
     store.ensure()
-    generator = Generator(config.generator_command, config.generator_timeout_s)
+    generator = Generator(config.generator_command, config.generator_timeout_s,
+                          display_root=store.root)
     ledger = CostLedger(config.ceiling_usd)
     fixture_seen = False
     status = "complete"
@@ -263,6 +264,7 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
                 prefix = store.pytest_prefix(module, "collect-round-0-%s" % _fslug(rel))
                 res = run_pytest(
                     cwd=config.repo_dir,
+                    display_root=store.root,
                     targets=[rel],
                     artifact_prefix=prefix,
                     timeout_s=config.per_candidate_timeout_s,
@@ -306,6 +308,7 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
                 )
                 res = run_pytest(
                     cwd=config.repo_dir,
+                    display_root=store.root,
                     targets=[s.c.nodeid],
                     artifact_prefix=prefix,
                     timeout_s=config.per_candidate_timeout_s,
@@ -358,6 +361,7 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
             prefix = store.gate_prefix(i)
             res = run_pytest(
                 cwd=config.repo_dir,
+                display_root=store.root,
                 targets=node_ids,
                 artifact_prefix=prefix,
                 timeout_s=config.per_candidate_timeout_s * max(len(node_ids), 1),
@@ -410,7 +414,7 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
         "fixture": fixture_seen,
         "repo": {"package": config.package, "sha": sha, "dir": os.path.basename(config.repo_dir)},
         "manifest_version": manifest_version,
-        "config": _config_with_model(config, ledger),
+        "config": _config_with_model(config, ledger, generator),
         "candidates": [s.to_dict() for s in states],
         "cost": ledger.to_dict(),
         "coverage": {
@@ -428,7 +432,7 @@ def run_loop(config: LoopConfig, store: RunStore, sha: str, manifest_version: st
 # ---------------------------------------------------------------- helpers
 
 
-def _config_with_model(config: LoopConfig, ledger: CostLedger) -> Dict:
+def _config_with_model(config: LoopConfig, ledger: CostLedger, generator=None) -> Dict:
     """The run's configuration, with the model id the generator actually reported.
 
     The harness does not choose the model -- the generator does, and says which
@@ -439,6 +443,7 @@ def _config_with_model(config: LoopConfig, ledger: CostLedger) -> Dict:
     cfg = config.to_dict()
     reported = sorted({r.model for r in ledger.records if r.model})
     cfg["models_reported_by_generator"] = reported
+    cfg["endpoints_reported_by_generator"] = sorted(getattr(generator, "endpoints", ()) or ())
     if cfg["model"] is None:
         cfg["model"] = ", ".join(reported) if reported else "unknown"
     return cfg

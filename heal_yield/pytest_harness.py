@@ -113,6 +113,20 @@ def scrubbed_env(extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     return env
 
 
+def display_args(args: List[str], root: Optional[str]) -> List[str]:
+    """`args` with any path under `root` rewritten relative to `root`."""
+    if not root:
+        return list(args)
+    root = os.path.abspath(root)
+    out = []
+    for a in args:
+        if os.path.isabs(a) and (a == root or a.startswith(root + os.sep)):
+            out.append(os.path.relpath(a, root))
+        else:
+            out.append(a)
+    return out
+
+
 def _strip_params(nodeid: str) -> str:
     """`a.py::test_p[x-1]` -> `a.py::test_p`. The `[` is searched after the path."""
     sep = nodeid.find("::")
@@ -158,11 +172,15 @@ def run_pytest(
     collect_only: bool = False,
     env: Optional[Dict[str, str]] = None,
     python: Optional[str] = None,
+    display_root: Optional[str] = None,
 ) -> ExecutionResult:
     """Run pytest and write every raw byte of it next to the run.
 
     `artifact_prefix` is an absolute path stem; this writes `<stem>.txt` and,
     for a real execution, `<stem>.jsonl` (the report log `verify` reads).
+    `display_root` is the run directory: paths under it are written into the
+    stored header relative to it, so a published run carries no host path
+    for its own artifacts. The command that runs is unchanged.
     """
     os.makedirs(os.path.dirname(artifact_prefix), exist_ok=True)
     report_log = artifact_prefix + ".jsonl"
@@ -199,7 +217,7 @@ def run_pytest(
     duration = time.time() - started
 
     with open(artifact_prefix + ".txt", "w") as fh:
-        fh.write("$ " + " ".join(args) + "\n")
+        fh.write("$ " + " ".join(display_args(args, display_root)) + "\n")
         fh.write("# cwd: %s\n" % cwd)
         fh.write("# returncode: %s\n" % returncode)
         fh.write("# timed_out: %s\n" % timed_out)

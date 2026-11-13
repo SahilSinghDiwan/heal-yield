@@ -183,7 +183,9 @@ def _metadata(run: Dict, repo, sha: str, m) -> Dict:
         "manifest": {"version": m.version, "declared": m.data.get("declared")},
         "model": {"id": cfg["model"],
                   "reported_by_generator": cfg["models_reported_by_generator"],
-                  "temperature": cfg["temperature"]},
+                  "temperature": cfg["temperature"],
+                  # Host only, as the generator reported it. Older runs lack this key.
+                  "endpoint": cfg.get("endpoints_reported_by_generator", [])},
         "loop": {"k": cfg["k"], "flake_gate_executions": cfg["flake_gate_executions"],
                  "generator_command": cfg["generator_command"]},
         "limits": {"per_candidate_timeout_s": cfg["per_candidate_timeout_s"],

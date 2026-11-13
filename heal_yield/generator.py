@@ -31,9 +31,26 @@ import json
 import os
 import shlex
 import subprocess
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
+from urllib.parse import urlsplit
 
 from .cost import UsageRecord
+from .pytest_harness import display_args
+
+
+def endpoint_host(base_url) -> Optional[str]:
+    """`https://user:pw@host:8443/v1?k=x` -> `host:8443`. Credentials never survive."""
+    if not base_url or not isinstance(base_url, str):
+        return None
+    try:
+        parts = urlsplit(base_url)
+        host = parts.hostname
+        port = parts.port
+    except ValueError:
+        return None
+    if not host:
+        return None
+    return "%s:%d" % (host, port) if port else host
 
 
 class GeneratorError(Exception):
@@ -54,8 +71,13 @@ class GeneratorResult(object):
 class Generator(object):
     """A generator command, invoked per module per round."""
 
-    def __init__(self, command: str, timeout_s: float):
+    def __init__(self, command: str, timeout_s: float, display_root: Optional[str] = None):
         self.command = command
+        #: The run directory; paths under it are stored relative to it.
+        self.display_root = display_root
+        #: Endpoint hosts the generator reported (`base_url` in its usage
+        #: record), host and port only -- never a path, query or credential.
+        self.endpoints: Set[str] = set()
         self.argv: List[str] = shlex.split(command)
         if not self.argv:
             raise GeneratorError("empty generator command")
@@ -110,7 +132,7 @@ class Generator(object):
             returncode = -9
 
         with open(os.path.join(artifact_dir, "generator.txt"), "w") as fh:
-            fh.write("$ " + " ".join(argv) + "\n")
+            fh.write("$ " + " ".join(display_args(argv, self.display_root)) + "\n")
             fh.write("# returncode: %s\n" % returncode)
             fh.write("--- stdout ---\n" + stdout)
             fh.write("\n--- stderr ---\n" + stderr)
@@ -122,6 +144,9 @@ class Generator(object):
                     meta = json.load(fh)
             except ValueError:
                 meta = {}
+        host = endpoint_host(meta.get("base_url"))
+        if host:
+            self.endpoints.add(host)
 
         usage = UsageRecord(
             round=round_index,
