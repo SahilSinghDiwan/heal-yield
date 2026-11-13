@@ -238,7 +238,7 @@ it ever needed to, the tool's central claim would be false.
 python -m pytest -q
 ```
 
-97 tests, entirely offline, against the fixture generator — including an end-to-end run
+98 tests, entirely offline, against the fixture generator — including an end-to-end run
 through the loop, the ledger invariant, the assertion-weakening guard, and the refusal to
 invent either unset limit. The paid generator is exercised with its one network call
 replaced; no test makes a request.

@@ -36,6 +36,8 @@ def test_endpoint_host_keeps_host_and_port_only():
     assert endpoint_host("https://u:p@h.example:8443/v1?k=x") == "h.example:8443"
     assert endpoint_host(None) is None
     assert endpoint_host("not a url") is None
+    assert endpoint_host("localhost:3001") == "localhost:3001", "idempotent on its own output"
+    assert endpoint_host("api.anthropic.com") == "api.anthropic.com"
 
 
 def test_display_args_rewrites_only_paths_under_the_run_dir(tmp_path):

@@ -29,6 +29,7 @@ import urllib.error
 import urllib.request
 from typing import Dict, List, Optional, Tuple
 
+from ..generator import endpoint_host
 from ._contract import parse_args, read_feedback, read_source, write_meta
 
 API_BASE = "https://api.anthropic.com"
@@ -232,7 +233,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         args.meta_out, served_model, prompt_tokens, completion_tokens, usd,
         {"round": args.round, "emitted": bool(code), "requested_model": model,
          "stop_reason": response.get("stop_reason"),
-         "base_url": args.base_url,
+         # Host and port only: usage.json is published, and a base URL can
+         # carry userinfo or a query-string key.
+         "endpoint": endpoint_host(args.base_url),
          "cost_basis": "unmetered" if args.unmetered else "priced",
          "pricing_usd_per_mtok": None if args.unmetered else list(pricing_for(model))},
     )

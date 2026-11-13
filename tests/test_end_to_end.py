@@ -581,6 +581,27 @@ def test_an_unmetered_run_records_the_served_model_and_says_cost_was_not_measure
     assert meta["model"] == "gpt-oss-120b"
     assert meta["cost_basis"] == "unmetered"
     assert meta["pricing_usd_per_mtok"] is None
+    assert meta["endpoint"] == "localhost:3001"
+
+
+def test_the_paid_generator_never_writes_a_full_url_to_usage_json(tmp_path, monkeypatch):
+    """usage.json is published; a base URL can carry userinfo or a key in its query."""
+    from heal_yield.generators import anthropic_gen
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "not-a-real-key")
+    monkeypatch.delenv("HEAL_YIELD_ARTIFACT_DIR", raising=False)
+    monkeypatch.setattr(anthropic_gen, "call_model", lambda *a, **k: {
+        "model": "gpt-oss-120b", "usage": {"input_tokens": 1, "output_tokens": 1},
+        "content": [{"type": "text", "text": "```python\ndef test_f():\n    assert 1\n```"}]})
+    url = "https://alice:hunter2@gw.example.com:8443/v1?api_key=topsecret"
+    argv = _paid_generator_argv(tmp_path, "gpt-oss-120b") + ["--base-url", url, "--unmetered"]
+    assert anthropic_gen.main(argv) == 0
+    raw = (tmp_path / "usage.json").read_text()
+    meta = json.loads(raw)
+    assert meta["endpoint"] == "gw.example.com:8443"
+    assert "base_url" not in meta
+    for leaked in ("alice", "hunter2", "topsecret", "/v1", "https://"):
+        assert leaked not in raw
 
 
 def test_an_unmetered_ledger_reports_unknown_cost_never_zero():

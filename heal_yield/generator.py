@@ -38,17 +38,24 @@ from .cost import UsageRecord
 from .pytest_harness import display_args
 
 
-def endpoint_host(base_url) -> Optional[str]:
-    """`https://user:pw@host:8443/v1?k=x` -> `host:8443`. Credentials never survive."""
-    if not base_url or not isinstance(base_url, str):
+def endpoint_host(value) -> Optional[str]:
+    """Reduce an endpoint to `host` or `host:port`. Credentials never survive.
+
+    Accepts a full URL (`https://user:pw@host:8443/v1?k=x` -> `host:8443`) or
+    an already-reduced `host[:port]`, so applying it twice is harmless.
+    """
+    if not value or not isinstance(value, str):
         return None
+    text = value.strip()
+    if "://" not in text:
+        text = "//" + text
     try:
-        parts = urlsplit(base_url)
+        parts = urlsplit(text)
         host = parts.hostname
         port = parts.port
     except ValueError:
         return None
-    if not host:
+    if not host or any(ch.isspace() for ch in host):
         return None
     return "%s:%d" % (host, port) if port else host
 
@@ -75,8 +82,10 @@ class Generator(object):
         self.command = command
         #: The run directory; paths under it are stored relative to it.
         self.display_root = display_root
-        #: Endpoint hosts the generator reported (`base_url` in its usage
-        #: record), host and port only -- never a path, query or credential.
+        #: Endpoint hosts the generator reported (`endpoint`, or a legacy
+        #: `base_url`, in its usage record), reduced again here so a
+        #: third-party generator's full URL is never recorded either: host
+        #: and port only, never a path, query or credential.
         self.endpoints: Set[str] = set()
         self.argv: List[str] = shlex.split(command)
         if not self.argv:
@@ -144,7 +153,7 @@ class Generator(object):
                     meta = json.load(fh)
             except ValueError:
                 meta = {}
-        host = endpoint_host(meta.get("base_url"))
+        host = endpoint_host(meta.get("endpoint") or meta.get("base_url"))
         if host:
             self.endpoints.add(host)
 
