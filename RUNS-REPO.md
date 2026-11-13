@@ -3,10 +3,9 @@
 Ticket 07 named this repository and fixed one thing about it: run directories are
 `runs/<date>-<repo>-<sha>/`. This file is the rest of the design.
 
-**It does not exist yet.** Nothing here has been created on GitHub, and no run has been
-committed to it. This is the layout the tool already writes locally (`heal_yield/runstore.py`
-is the executable copy of the per-run half) and the policy the repository will adopt when
-the first real run is executed.
+It exists at [`heal-yield-runs`](https://github.com/SahilSinghDiwan/heal-yield-runs) and holds
+six runs (`cachetools`, r1–r6). This is its layout (`heal_yield/runstore.py` is the
+executable copy of the per-run half) and the policy it follows.
 
 ## Why it is a second repository
 

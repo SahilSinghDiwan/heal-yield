@@ -14,7 +14,7 @@ measure a tool it did not ship.
 
 ---
 
-## Status: no measured run exists yet
+## Status: six runs of one configuration, no headline claim
 
 Read this before reading anything else in this repository.
 
@@ -26,7 +26,8 @@ single run's heal yield on this setup is not the tool's heal yield. One run fail
 error and was replaced; it is kept and disclosed. Cost was *unmetered* (the endpoint reports no
 price), which is not zero. `packaging` and `textdistance` have not been run. The artifacts, with
 the caveats in full, are in [`heal-yield-runs`](https://github.com/SahilSinghDiwan/heal-yield-runs)
-at `b5e78d0`.
+at `b5e78d0`. **Two harness defects affected these numbers**; see
+[Known defects in runs r1–r6](#known-defects-in-runs-r1r6) before quoting any of them.
 
 Two limits are **declared-as-unset** for the same reason:
 
@@ -35,7 +36,7 @@ Two limits are **declared-as-unset** for the same reason:
 | Per-run USD ceiling | tripping it truncates the run, loudly | **not yet measured** |
 | Per-candidate time limit | exceeding it is disposition `timeout` | **not yet measured** |
 
-Both are meant to be fixed from an *observed* run. The two runs above used a ceiling of $1
+Both are meant to be fixed from an *observed* run. The six runs above used a ceiling of $1
 (inert, as cost was unmetered) and a 120 s limit, both **the operator's choice**, not
 measured values, so the tool still has
 **no default for either** — `heal-yield run` requires both on the command line and exits
@@ -101,8 +102,34 @@ Target modules' existing tests are removed before a
 run so every target starts from the same baseline; **this is not a claim to improve on the
 maintainers' suites**.
 
-When results exist, each row will carry the `heal-yield-runs` commit SHA it was recomputed
-from, and any reader will be able to reproduce the recomputation offline.
+Each row carries the `heal-yield-runs` commit SHA it was recomputed from, and any reader can
+reproduce the recomputation offline. With the corrected outcome reader (defect 2 below),
+`verify` reports one evidence disagreement in r3; the other five runs verify.
+
+## Known defects in runs r1–r6
+
+Two defects in the harness that produced r1–r6 changed the published numbers. Both are fixed
+in the code; the published runs are append-only and stay as written. Corrected repetitions
+are pending, and no number in the table above should be quoted without this section.
+
+1. **The repair round discarded passing tests.** Every undecided candidate, passing ones
+   included, was sent back to the model for repair. When the model's rewritten file left a
+   passing function out, the guard rejected it as "candidate was deleted by the repair". In
+   the five complete runs, all 30 `weakened-rejected` candidates carry that reason; 18 of
+   them had passed at round 0, and 23 were passing at their last execution. The model also
+   rewrote passing functions it kept: no round-0 passer's function reached the flake gate
+   unchanged. First-pass green is therefore understated in every complete run (round-0
+   passes before the gate: r1 22 of 26, r2 13 of 25, r3 26 of 30, r4 21 of 29, r6 16 of 27,
+   against published first-pass green numerators of 7, 7, 9, 10 and 10).
+2. **Parametrized tests were always read as failed.** Outcomes were matched by a node-id
+   suffix, which a parametrized id (`test_x[case]`) never matches. One published candidate
+   is affected: r3 `test_cachetools_func.py::test_basic_caching_decorator`, which passed all
+   five cases at round 0 and was recorded `failed`.
+
+Since fixed in the same pass, with no effect on a published outcome found: a `pytest.skip()`
+inside a test body was read as a pass (no published run contains a skipped report), and
+repair feedback was truncated twice (5 of 63 published feedback files exceeded the model-side
+limit, and 10 of 404 candidate sections were cut from the prompt).
 
 ## Install
 
@@ -130,9 +157,11 @@ Then recompute every number it printed, from the stored artifacts, with nothing 
 heal-yield verify --run <the run directory it named>
 ```
 
-## The first real run — one command
+## A paid run — one command
 
-This is the only command that spends money, and it has not been run.
+This is the only command that spends money. The six published runs used the same generator
+against a free gateway (`--model gpt-oss-120b --unmetered`, base URL `localhost`); this paid
+form, against `api.anthropic.com`, has not been run.
 
 ```
 ANTHROPIC_API_KEY=... heal-yield run \
@@ -163,7 +192,8 @@ Notes, in the order they will bite:
   read from the generator's usage records — not a flag on `heal-yield run`.
 - Run artifacts land under `$HEAL_YIELD_RUNS` (default `../heal-yield-runs/runs`). That
   repository's layout and its append-only policy are specified in
-  [RUNS-REPO.md](RUNS-REPO.md); **it has not been created**.
+  [RUNS-REPO.md](RUNS-REPO.md). It is at
+  [`heal-yield-runs`](https://github.com/SahilSinghDiwan/heal-yield-runs).
 - Repeat with `--repo packaging` and `--repo textdistance` for the other two v1 targets.
 
 ## Measure your own tool
@@ -208,7 +238,7 @@ it ever needed to, the tool's central claim would be false.
 python -m pytest -q
 ```
 
-62 tests, entirely offline, against the fixture generator — including an end-to-end run
+97 tests, entirely offline, against the fixture generator — including an end-to-end run
 through the loop, the ledger invariant, the assertion-weakening guard, and the refusal to
 invent either unset limit. The paid generator is exercised with its one network call
 replaced; no test makes a request.

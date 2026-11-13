@@ -147,8 +147,8 @@ they have a defined meaning, and they have **no value**:
 | Per-run USD ceiling | metric 8, *Truncated runs* | **not yet measured** |
 | Per-candidate time limit | disposition `timeout` | **not yet measured** |
 
-Both are meant to be fixed from an **observed run**, and no run has been
-observed. So there is no default anywhere in the tool: `heal-yield run`
+Both are meant to be fixed from an **observed run**, and none has been fixed
+from one yet. So there is no default anywhere in the tool: `heal-yield run`
 **requires** `--ceiling-usd` and `--per-candidate-timeout` on the command line
 and exits rather than choosing for you, and `LoopConfig` raises `UnsetLimit` if
 either is omitted. A default here would within one release be quoted as a
