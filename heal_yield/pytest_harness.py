@@ -71,9 +71,14 @@ def _parse_report_log(path: str) -> Dict[str, str]:
                 continue
             if outcome in ("failed", "error"):
                 outcomes[nodeid] = "failed"
-            elif when == "call" and nodeid not in outcomes:
+            elif outcomes.get(nodeid) == "failed":
+                continue
+            elif when == "call":
+                # The call phase is the test body. It overrides setup's
+                # `passed`: a pytest.skip() in the body is setup passed,
+                # call skipped, and must not be read as a pass.
                 outcomes[nodeid] = outcome
-            elif nodeid not in outcomes:
+            else:
                 outcomes.setdefault(nodeid, outcome)
     return outcomes
 
