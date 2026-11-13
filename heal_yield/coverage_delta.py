@@ -18,6 +18,8 @@ import sys
 from typing import Dict, List, Optional
 from xml.etree import ElementTree
 
+from .pytest_harness import scrubbed_env
+
 
 class CoverageError(Exception):
     pass
@@ -63,9 +65,8 @@ def measure(
     os.makedirs(os.path.dirname(out_xml), exist_ok=True)
     exe = python or sys.executable
     data_file = os.path.join(os.path.dirname(out_xml), ".coverage")
-    env = dict(os.environ)
-    env["COVERAGE_FILE"] = data_file
-    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    # The same scrubbed environment as every other run of generated tests.
+    env = scrubbed_env({"COVERAGE_FILE": data_file})
     if os.path.exists(data_file):
         os.remove(data_file)
 

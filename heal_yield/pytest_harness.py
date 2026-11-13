@@ -83,6 +83,36 @@ def _parse_report_log(path: str) -> Dict[str, str]:
     return outcomes
 
 
+#: Variables the generated tests' process inherits from the host. Everything
+#: else -- API keys, tokens, cloud credentials -- is left out: the code being
+#: run was written by a model, and it needs none of it.
+ENV_ALLOWLIST = (
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TERM", "TZ",
+    "LANG", "LANGUAGE",
+    "TMPDIR", "TEMP", "TMP",
+    "PYTHONPATH", "PYTHONHASHSEED", "PYTHONIOENCODING", "PYTHONUTF8", "PYTHONHOME",
+    "VIRTUAL_ENV",
+    # Windows needs these to start a Python process at all.
+    "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC", "PATHEXT", "WINDIR",
+)
+ENV_ALLOWED_PREFIXES = ("LC_", "CONDA_")
+
+
+def scrubbed_env(extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """The environment for a process that runs generated tests.
+
+    An allowlist, not a denylist: a secret under a name nobody thought of is
+    excluded by default. `extra` is the caller's own, explicit additions.
+    """
+    env = {
+        k: v for k, v in os.environ.items()
+        if k in ENV_ALLOWLIST or k.startswith(ENV_ALLOWED_PREFIXES)
+    }
+    env.update(extra or {})
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    return env
+
+
 def _strip_params(nodeid: str) -> str:
     """`a.py::test_p[x-1]` -> `a.py::test_p`. The `[` is searched after the path."""
     sep = nodeid.find("::")
@@ -143,9 +173,7 @@ def run_pytest(
     args += list(extra_args or [])
     args += list(targets)
 
-    run_env = dict(os.environ)
-    run_env.update(env or {})
-    run_env["PYTHONDONTWRITEBYTECODE"] = "1"
+    run_env = scrubbed_env(env)
 
     import time
 
