@@ -7,11 +7,21 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        os: [ubuntu-latest]
+        include:
+          # ubuntu-latest is Ubuntu 26.04, and actions/setup-python publishes
+          # no Python 3.9 build for it (3.9.25 exists for 22.04 and 24.04).
+          # Keep 3.9 tested on the newest image that still has it.
+          - python-version: "3.9"
+            os: ubuntu-24.04
+        exclude:
+          - python-version: "3.9"
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
